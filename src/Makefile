@@ -14,13 +14,13 @@
 # See the GNU Lesser General Public License in COPYING.LGPL for more details.
 #
 
-PROGS=vector_scal_task_insert 
+PROGS=nbody
 
 include ./starpu.mk
 
-vector_scal_task_insert: vector_scal_task_insert.o vector_scal_cpu.o
+nbody: nbody.o nbody_cpu.o
 
 ifeq ($(USE_CUDA),1)
-vector_scal_task_insert: vector_scal_cuda.o
-vector_scal_task_insert: LDLIBS+=-L$(CUDA_PATH)/lib64 -lcudart -lstdc++
+nbody: nbody_cuda.o
+nbody: LDLIBS+=-L$(CUDA_PATH)/lib64 -lcudart -lstdc++
 endif
