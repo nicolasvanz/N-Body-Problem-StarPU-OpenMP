@@ -63,7 +63,7 @@ int main(const int argc, const char** argv) {
   int nBodies = 2<<12;
   if (argc > 1) nBodies = 2<<atoi(argv[1]);
 
-#if DEBUG
+#ifdef DEBUG
 	const char * initialized_pos = "debug/initialized_pos_12";
 	const char * initialized_vel = "debug/initialized_vel_12";
 	const char * computed_pos = "debug/computed_pos_12";
@@ -77,7 +77,7 @@ int main(const int argc, const char** argv) {
   Pos * pos = (Pos *)(malloc(sizeof(Pos) * nBodies));
 	Vel * vel = (Vel *)(malloc(sizeof(Vel) * nBodies));
 
-#if DEBUG
+#ifdef DEBUG
 	read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
 	read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
 #else
@@ -139,7 +139,7 @@ int main(const int argc, const char** argv) {
 		starpu_task_wait_for_all();
 	}
 
-#if DEBUG
+#ifdef DEBUG
 	write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
 	write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
 #endif	
