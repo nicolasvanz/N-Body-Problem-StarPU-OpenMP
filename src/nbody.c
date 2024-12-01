@@ -22,92 +22,133 @@
  *  3- how a kernel can manipulate the data (buffers[0].vector.ptr)
  */
 #include <starpu.h>
+#include "include/body.h"
+#include "include/files.h"
 
-#define    NX    1<<30
-
-extern void vector_scal_cpu(void *buffers[], void *_args);
-extern void vector_scal_cuda(void *buffers[], void *_args);
+extern void bodyForce_cpu(void *buffers[], void *_args);
+extern void bodyForce_cuda(void *buffers[], void *_args);
+extern void integratePositions_cpu(void *buffers[], void *_args);
+extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel perfmodel = {
 	.type = STARPU_NL_REGRESSION_BASED,
-	.symbol = "vector_scal"
+	.symbol = "nbody"
 };
 
-static struct starpu_codelet cl = {
-	/* CPU implementation of the codelet */
-	.cpu_funcs = {vector_scal_cpu},
+static struct starpu_codelet bodyForce_cl = {
+	.cpu_funcs = {bodyForce_cpu},
 
 #ifdef STARPU_USE_CUDA
-	/* CUDA implementation of the codelet */
-	.cuda_funcs = {vector_scal_cuda},
+	.cuda_funcs = {bodyForce_cuda},
 #endif
-	.nbuffers = 1,
-	.modes = {STARPU_RW},
 
+	.nbuffers = 2,
+	.modes = {STARPU_R, STARPU_RW},
 	.model = &perfmodel,
 };
 
-int main(void)
-{
-	/* We consider a vector of float that is initialized just as any of C
-	 * data */
-	float *vector;
-	double start_time;
-	unsigned i;
+static struct starpu_codelet integratePositions_cl = {
+	.cpu_funcs = {integratePositions_cpu},
+
+#ifdef STARPU_USE_CUDA
+	.cuda_funcs = {integratePositions_cuda},
+#endif
+
+	.nbuffers = 2,
+	.modes = {STARPU_RW, STARPU_R},
+	.model = &perfmodel,
+};
+
+int main(const int argc, const char** argv) {
+  int nBodies = 2<<12;
+  if (argc > 1) nBodies = 2<<atoi(argv[1]);
+
+#if DEBUG
+	const char * initialized_pos = "debug/initialized_pos_12";
+	const char * initialized_vel = "debug/initialized_vel_12";
+	const char * computed_pos = "debug/computed_pos_12";
+	const char * computed_vel = "debug/computed_vel_12";
+#endif
 
 	/* Initialize StarPU with default configuration */
 	int ret = starpu_init(NULL);
 	STARPU_CHECK_RETURN_VALUE(ret, "starpu_init");
 
-	vector = malloc(sizeof(vector[0]) * NX);
-	for (i = 0; i < NX; i++)
-		vector[i] = 1.0f;
+  Pos * pos = (Pos *)(malloc(sizeof(Pos) * nBodies));
+	Vel * vel = (Vel *)(malloc(sizeof(Vel) * nBodies));
 
-	fprintf(stderr, "BEFORE : First element was %f\n", vector[0]);
+#if DEBUG
+	read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
+	read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
+#else
+	for (int i = 0; i < nBodies; i++) {
+		pos[i].x = ((float)rand()/(float)(RAND_MAX)) * 100.0f;
+		pos[i].y = ((float)rand()/(float)(RAND_MAX)) * 100.0f;
+		pos[i].z = ((float)rand()/(float)(RAND_MAX)) * 100.0f;
+	}
+	for (int i = 0; i < nBodies; i++) {
+		vel[i].vx = ((float)rand()/(float)(RAND_MAX)) * 10.0f;
+		vel[i].vy = ((float)rand()/(float)(RAND_MAX)) * 10.0f;
+		vel[i].vz = ((float)rand()/(float)(RAND_MAX)) * 10.0f;
+	}
+#endif
 
-	/* Tell StaPU to associate the "vector" vector with the "vector_handle"
-	 * identifier. When a task needs to access a piece of data, it should
-	 * refer to the handle that is associated to it.
-	 * In the case of the "vector" data interface:
-	 *  - the first argument of the registration method is a pointer to the
-	 *    handle that should describe the data
-	 *  - the second argument is the memory node where the data (ie. "vector")
-	 *    resides initially: 0 stands for an address in main memory, as
-	 *    opposed to an adress on a GPU for instance.
-	 *  - the third argument is the adress of the vector in RAM
-	 *  - the fourth argument is the number of elements in the vector
-	 *  - the fifth argument is the size of each element.
-	 */
-	starpu_data_handle_t vector_handle;
-	starpu_vector_data_register(&vector_handle, STARPU_MAIN_RAM, (uintptr_t)vector,
-				    NX, sizeof(vector[0]));
+	/* starpu data handles */
+	starpu_data_handle_t pos_handle;
+	starpu_vector_data_register(
+		&pos_handle,
+		STARPU_MAIN_RAM,
+		(uintptr_t)pos,
+		nBodies,
+		sizeof(Pos)
+	);
 
-	float factor = 3.14;
+	starpu_data_handle_t vel_handle;
+	starpu_vector_data_register(
+		&vel_handle,
+		STARPU_MAIN_RAM,
+		(uintptr_t)vel,
+		nBodies,
+		sizeof(Vel)
+	);
 
-	start_time = starpu_timing_now();
-	ret = starpu_task_insert(&cl,
-				 /* an argument is passed to the codelet, beware that this is a
-				  * READ-ONLY buffer and that the codelet may be given a pointer to a
-				  * COPY of the argument */
-				 STARPU_VALUE, &factor, sizeof(factor),
-				 /* the codelet manipulates one buffer in RW mode */
-				 STARPU_RW, vector_handle,
-				 0);
-	STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
+  const int nIters = 10; 
+  // double totalTime = 0.0;
+	int initialIndex = 0, finalIndex = nBodies;
+	// start_time = starpu_timing_now();
 
-	/* Wait for tasks completion */
-	starpu_task_wait_for_all();
-	fprintf(stderr, "computation took %fµs\n", starpu_timing_now() - start_time);
+	for (int i = 0; i < nIters; i++) {
+		ret = starpu_task_insert(&bodyForce_cl,
+			STARPU_VALUE, &initialIndex, sizeof(initialIndex),
+			STARPU_VALUE, &finalIndex, sizeof(finalIndex),
+			STARPU_R, pos_handle,
+			STARPU_RW, vel_handle,
+			0
+		);
+		STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
+		starpu_task_wait_for_all();
 
-	/* StarPU does not need to manipulate the array anymore so we can stop
-	 * monitoring it */
-	starpu_data_unregister(vector_handle);
+		ret = starpu_task_insert(&integratePositions_cl,
+			STARPU_VALUE, &initialIndex, sizeof(initialIndex),
+			STARPU_VALUE, &finalIndex, sizeof(finalIndex),
+			STARPU_RW, pos_handle,
+			STARPU_R, vel_handle,
+			0
+		);
+		STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
+		starpu_task_wait_for_all();
+	}
 
-	fprintf(stderr, "AFTER First element is %f\n", vector[0]);
-	free(vector);
+#if DEBUG
+	write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
+	write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
+#endif	
 
-	/* terminate StarPU, no task can be submitted after */
+	starpu_data_unregister(pos_handle);
+	starpu_data_unregister(vel_handle);
+
+	free(vel);
+	free(pos);
+
 	starpu_shutdown();
-
-	return 0;
 }

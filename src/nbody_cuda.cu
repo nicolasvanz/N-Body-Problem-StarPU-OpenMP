@@ -15,30 +15,81 @@
  */
 
 #include <starpu.h>
+#include "include/body.h"
 
-static __global__ void vector_mult_cuda(float *val, unsigned int n, float factor)
-{
-        unsigned i =  blockIdx.x*blockDim.x + threadIdx.x;
-        if (i < n)
-               val[i] *= factor;
+static __global__
+void bodyForce(Pos *p, Vel *v, int initial, int final, int n) {
+  int initialIndex = initial + threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = blockDim.x * gridDim.x;
+  for (int i = initialIndex; i < final; i += stride) {
+    float Fx = 0.0f; float Fy = 0.0f; float Fz = 0.0f;
+
+    for (int j = 0; j < n; j++) {
+      float dx = p[j].x - p[i].x;
+      float dy = p[j].y - p[i].y;
+      float dz = p[j].z - p[i].z;
+      float distSqr = dx*dx + dy*dy + dz*dz + SOFTENING;
+      float invDist = rsqrtf(distSqr);
+      float invDist3 = invDist * invDist * invDist;
+
+      Fx += dx * invDist3; Fy += dy * invDist3; Fz += dz * invDist3;
+    }
+
+    v[i].vx += dt*Fx;
+    v[i].vy += dt*Fy;
+    v[i].vz += dt*Fz;
+  }
 }
 
-extern "C" void vector_scal_cuda(void *buffers[], void *_args)
+static __global__
+void integratePositions(Pos *p, Vel *v, int initial, int final) {
+  int initialIndex = initial + threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = blockDim.x * gridDim.x;
+  for (int i = initialIndex ; i < final; i += stride) { // integrate position
+    p[i].x += v[i].vx*dt;
+    p[i].y += v[i].vy*dt;
+    p[i].z += v[i].vz*dt;
+  }
+}
+
+extern "C" void bodyForce_cuda(void *buffers[], void *_args)
 {
-        /* length of the vector */
-        unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
-        /* local copy of the vector pointer */
-        float *val = (float *)STARPU_VECTOR_GET_PTR(buffers[0]);
+  /* length of the vector */
+  unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
+
+  /* local copy of the vector pointer */
+  Pos *pos = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+  Vel *vel = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
 	/* extract the value arguments */
-	float factor;
-	starpu_codelet_unpack_args(_args, &factor);
+	int initialIndex, finalIndex;
+	starpu_codelet_unpack_args(_args, &initialIndex, &finalIndex);
 
-        unsigned threads_per_block = 64;
-        unsigned nblocks = (n + threads_per_block-1) / threads_per_block;
+  unsigned threads_per_block = 64;
+  unsigned nblocks = (n + threads_per_block-1) / threads_per_block;
 
-        vector_mult_cuda<<<nblocks,threads_per_block, 0, starpu_cuda_get_local_stream()>>>(val, n, factor);
+  bodyForce<<<nblocks,threads_per_block, 0, starpu_cuda_get_local_stream()>>>(pos, vel, initialIndex, finalIndex, n);
 
-        cudaStreamSynchronize(starpu_cuda_get_local_stream());
+  cudaStreamSynchronize(starpu_cuda_get_local_stream());
 }
 
+extern "C" void integratePositions_cuda(void *buffers[], void *_args)
+{
+  /* length of the vector */
+  unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
+
+  /* local copy of the vector pointer */
+  Pos *pos = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+  Vel *vel = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+
+	/* extract the value arguments */
+	int initialIndex, finalIndex;
+	starpu_codelet_unpack_args(_args, &initialIndex, &finalIndex);
+
+  unsigned threads_per_block = 64;
+  unsigned nblocks = (n + threads_per_block-1) / threads_per_block;
+
+  integratePositions<<<nblocks,threads_per_block, 0, starpu_cuda_get_local_stream()>>>(pos, vel, initialIndex, finalIndex);
+
+  cudaStreamSynchronize(starpu_cuda_get_local_stream());
+}
