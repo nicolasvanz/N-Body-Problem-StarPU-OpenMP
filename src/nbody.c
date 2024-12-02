@@ -30,9 +30,14 @@ extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);
 extern void integratePositions_cuda(void *buffers[], void *_args);
 
-static struct starpu_perfmodel perfmodel = {
+static struct starpu_perfmodel bodyforce_perfmodel = {
 	.type = STARPU_NL_REGRESSION_BASED,
-	.symbol = "nbody"
+	.symbol = "bodyforce"
+};
+
+static struct starpu_perfmodel integratepositions_perfmodel = {
+	.type = STARPU_NL_REGRESSION_BASED,
+	.symbol = "integratepositions"
 };
 
 static struct starpu_codelet bodyForce_cl = {
@@ -44,7 +49,7 @@ static struct starpu_codelet bodyForce_cl = {
 
 	.nbuffers = 2,
 	.modes = {STARPU_R, STARPU_RW},
-	.model = &perfmodel,
+	.model = &bodyforce_perfmodel,
 };
 
 static struct starpu_codelet integratePositions_cl = {
@@ -56,7 +61,7 @@ static struct starpu_codelet integratePositions_cl = {
 
 	.nbuffers = 2,
 	.modes = {STARPU_RW, STARPU_R},
-	.model = &perfmodel,
+	.model = &integratepositions_perfmodel,
 };
 
 int main(const int argc, const char** argv) {
