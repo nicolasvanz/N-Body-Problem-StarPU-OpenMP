@@ -6,11 +6,11 @@ NVCC = nvcc
 CPPFLAGS += $(shell pkg-config --cflags starpu-$(STARPU_VERSION))
 LDLIBS += $(shell pkg-config --libs starpu-$(STARPU_VERSION))
 
-CFLAGS += -O3 -Wall -Wextra -lm
+CFLAGS += -O3 -Wall -Wextra -lm -fopenmp
 NVCCFLAGS = $(shell pkg-config --cflags starpu-$(STARPU_VERSION)) -std=c++11
 
 # to avoid having to use LD_LIBRARY_PATH
-LDLIBS += -lm -Wl,-rpath -Wl,$(shell pkg-config --variable=libdir starpu-$(STARPU_VERSION))
+LDLIBS += -fopenmp -lm -Wl,-rpath -Wl,$(shell pkg-config --variable=libdir starpu-$(STARPU_VERSION))
 
 # Automatically enable CUDA / OpenCL
 STARPU_CONFIG=$(shell pkg-config --variable=includedir starpu-$(STARPU_VERSION))/starpu/$(STARPU_VERSION)/starpu_config.h
