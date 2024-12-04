@@ -13,6 +13,9 @@ services:
               capabilities: [gpu]
     volumes:
       - ./src:/home/src
+      - ./results:/home/results
+      - ./experiments.sh:/home/experiments.sh
+      - ./const.sh:/home/const.sh
   openmp:
     build: 
       dockerfile: openmp.Dockerfile

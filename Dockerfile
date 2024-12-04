@@ -27,6 +27,6 @@ RUN sudo wget https://download.open-mpi.org/release/hwloc/v2.9/hwloc-${HWLOC_VER
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-COPY ./src ./src
+WORKDIR /home
 
-WORKDIR /home/src
+WORKDIR /home/src/starpu
