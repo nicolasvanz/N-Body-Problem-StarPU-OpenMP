@@ -1,7 +1,5 @@
 source const.sh
 
-
-
 function replace
 {
 	dir=$1
@@ -20,7 +18,7 @@ function run_replications
   prefix=$2
 
   (cd $dir_results && mkdir -p $prefix)
-  eval "$command"
+  eval "$command" #calibrate
   for i in {1..7}
   do
     eval "$command" > "$dir_results/$prefix/$i"
@@ -38,8 +36,19 @@ function starpu_gpu
   done
 }
 
-starpu_parts_macro="#define PARTS"
-starpu_parts_default="$starpu_parts_macro 1"
-starpu_parts_test="$starpu_parts_macro 2"
+function starpu_cpu
+{
+  starpu_parts_macro="#define PARTS"
+  starpu_parts_default="$starpu_parts_macro 1"
+  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro 8"
+  (cd $dir_starpu && make clean && make)
+  for n in {11..18}
+  do
+    prefix="starpu_cpu-$n"
+    run="STARPU_NGPU=0 $dir_starpu/nbody $n"
+    run_replications "$run" "$prefix"
+  done
+  replace "$dir_starpu" "$starpu_macro 8" "$starpu_parts_default"
+}
 
-starpu_gpu
+starpu_cpu
