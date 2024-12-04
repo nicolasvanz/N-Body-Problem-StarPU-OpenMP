@@ -45,10 +45,25 @@ function starpu_cpu
   for n in {11..18}
   do
     prefix="starpu_cpu-$n"
-    run="STARPU_NGPU=0 $dir_starpu/nbody $n"
+    run="STARPU_NCUDA=0 $dir_starpu/nbody $n"
     run_replications "$run" "$prefix"
   done
   replace "$dir_starpu" "$starpu_macro 8" "$starpu_parts_default"
 }
 
-starpu_cpu
+function starpu_cpu_gpu
+{
+  starpu_parts_macro="#define PARTS"
+  starpu_parts_default="$starpu_parts_macro 1"
+  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro 8"
+  (cd $dir_starpu && make clean && make)
+  for n in {11..18}
+  do
+    prefix="starpu_cpu_gpu-$n"
+    run="$dir_starpu/nbody $n"
+    run_replications "$run" "$prefix"
+  done
+  replace "$dir_starpu" "$starpu_macro 8" "$starpu_parts_default"
+}
+
+starpu_cpu_gpu
