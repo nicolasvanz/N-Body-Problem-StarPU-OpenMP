@@ -51,7 +51,7 @@ int main(const int argc, const char** argv) {
 
   const int nIters = 10;
 
-
+	double start = omp_get_wtime(); 
   for (int iter = 0; iter < nIters; iter++) {
     #if (BODYFORCE_USE_CPU == 1)
       #pragma omp task
@@ -70,7 +70,7 @@ int main(const int argc, const char** argv) {
       integratePositions_gpu(pos, vel, nBodies);
     #endif
   }
-
+	printf("%lf\n", omp_get_wtime() - start); // seconds
 
 #ifdef DEBUG
 	write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
