@@ -13,3 +13,16 @@ services:
               capabilities: [gpu]
     volumes:
       - ./src:/home/src
+  openmp:
+    build: 
+      dockerfile: openmp.Dockerfile
+    command: bash
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./src:/src

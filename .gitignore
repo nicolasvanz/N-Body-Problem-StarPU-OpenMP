@@ -52,4 +52,5 @@ Mkfile.old
 dkms.conf
 
 nbody
-src/debug/computed*
+*computed_pos*
+*computed_vel*
