@@ -15,19 +15,19 @@
  */
 
 #include <starpu.h>
-#include "include/body.h"
+#include "../include/body.h"
 
 static __global__
-void bodyForce(Pos *p, Vel *v, int n) {
+void bodyForce(Pos *p, Vel *v, int n, int offset) {
   int initialIndex = threadIdx.x + blockIdx.x * blockDim.x;
   int stride = blockDim.x * gridDim.x;
   for (int i = initialIndex; i < n; i += stride) {
     float Fx = 0.0f; float Fy = 0.0f; float Fz = 0.0f;
 
     for (int j = 0; j < n; j++) {
-      float dx = p[j].x - p[i].x;
-      float dy = p[j].y - p[i].y;
-      float dz = p[j].z - p[i].z;
+      float dx = p[j].x - p[i+offset].x;
+      float dy = p[j].y - p[i+offset].y;
+      float dz = p[j].z - p[i+offset].z;
       float distSqr = dx*dx + dy*dy + dz*dz + SOFTENING;
       float invDist = rsqrtf(distSqr);
       float invDist3 = invDist * invDist * invDist;
@@ -62,13 +62,13 @@ extern "C" void bodyForce_cuda(void *buffers[], void *_args)
   Vel *vel = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
 	/* extract the value arguments */
-	// int initialIndex, finalIndex;
-	// starpu_codelet_unpack_args(_args, &initialIndex, &finalIndex);
+	int offset;
+	starpu_codelet_unpack_args(_args, &offset);
 
   unsigned threads_per_block = 64;
-  unsigned nblocks = (n + threads_per_block-1) / threads_per_block;
+  unsigned nblocks = 60;
 
-  bodyForce<<<nblocks,threads_per_block, 0, starpu_cuda_get_local_stream()>>>(pos, vel, n);
+  bodyForce<<<nblocks,threads_per_block, 0, starpu_cuda_get_local_stream()>>>(pos, vel, n, offset);
 
   cudaStreamSynchronize(starpu_cuda_get_local_stream());
 }

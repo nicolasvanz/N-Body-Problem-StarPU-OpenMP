@@ -16,7 +16,7 @@
 
 #include <starpu.h>
 #include <stdio.h>
-#include "include/body.h"
+#include "../include/body.h"
 
 void integratePositions_cpu(void *buffers[], void *_args)
 {
