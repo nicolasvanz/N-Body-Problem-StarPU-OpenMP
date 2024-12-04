@@ -16,5 +16,5 @@ function cecho
 
 dir_current=$PWD
 dir_results=$dir_current/results
-dir_results_raw=$dir_results/raw
 dir_starpu=$dir_current/src/starpu
+dir_openmp=$dir_current/src/openmp
