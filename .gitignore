@@ -54,3 +54,4 @@ dkms.conf
 nbody
 *computed_pos*
 *computed_vel*
+venv

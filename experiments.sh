@@ -63,7 +63,7 @@ function starpu_cpu_gpu
     run="$dir_starpu/nbody $n"
     run_replications "$run" "$prefix"
   done
-  replace "$dir_starpu" "$starpu_macro 8" "$starpu_parts_default"
+  replace "$dir_starpu" "$starpu_parts_macro 8" "$starpu_parts_default"
 }
 
 function openmp_cpu
@@ -111,5 +111,4 @@ function openmp_cpu_gpu
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_macro 0" "$openmp_bodyforce_use_cpu_default"
 }
 
-
-openmp_cpu_gpu
+starpu_gpu
