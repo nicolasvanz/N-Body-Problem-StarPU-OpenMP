@@ -1,8 +1,6 @@
 services:
   starpu:
     build: .
-    # stdin_open: true   # Keep the container's stdin open
-    # tty: true
     command: bash
     deploy:
       resources:
@@ -16,16 +14,3 @@ services:
       - ./results:/home/results
       - ./experiments.sh:/home/experiments.sh
       - ./const.sh:/home/const.sh
-  openmp:
-    build: 
-      dockerfile: openmp.Dockerfile
-    command: bash
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    volumes:
-      - ./src:/src
