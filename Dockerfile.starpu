@@ -5,7 +5,7 @@ USER root
 RUN sudo adduser starpu sudo
 USER starpu
 
-# cuda device is not recognized for some reason. The steps reinstall hwloc
+# cuda device is not recognized for some reason. These steps reinstall hwloc
 
 RUN sudo apt-get update && sudo apt-get install -y \
     build-essential \
@@ -26,7 +26,5 @@ RUN sudo wget https://download.open-mpi.org/release/hwloc/v2.9/hwloc-${HWLOC_VER
     cd .. && sudo rm -rf hwloc-${HWLOC_VERSION}*
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-
-WORKDIR /home
 
 WORKDIR /home/src/starpu
