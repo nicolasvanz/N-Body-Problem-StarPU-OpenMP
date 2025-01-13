@@ -1,7 +1,7 @@
 # Compiler and flags
 CC = clang
 # CFLAGS = -fopenmp -foffload=nvptx-none -O3 -Wall -std=c99 -lm
-CFLAGS = -fopenmp -fopenmp-targets=nvptx64 -O3 -Wall -std=c99 -lm
+CFLAGS = -fopenmp -fopenmp-targets=nvptx64 -O3 -Wall -std=c99
 
 # Source files and target
 SRCS = nbody.c nbody_cpu.c nbody_gpu.c 

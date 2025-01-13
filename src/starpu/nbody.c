@@ -34,54 +34,54 @@ extern void integratePositions_cpu(void *buffers[], void *_args);
 extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
-	.type = STARPU_HISTORY_BASED,
-	.symbol = "bodyforce"
-};
+		.type = STARPU_HISTORY_BASED,
+		.symbol = "bodyforce"};
 
 static struct starpu_perfmodel integratepositions_perfmodel = {
-	.type = STARPU_HISTORY_BASED,
-	.symbol = "integratepositions"
-};
+		.type = STARPU_HISTORY_BASED,
+		.symbol = "integratepositions"};
 
 static struct starpu_codelet bodyForce_cl = {
-	.cpu_funcs = {bodyForce_cpu},
+		.cpu_funcs = {bodyForce_cpu},
 
 #ifdef STARPU_USE_CUDA
-	.cuda_funcs = {bodyForce_cuda},
+		.cuda_funcs = {bodyForce_cuda},
 #endif
 
-	.nbuffers = 2,
-	.modes = {STARPU_R, STARPU_RW},
-	.model = &bodyforce_perfmodel,
+		.nbuffers = 2,
+		.modes = {STARPU_R, STARPU_RW},
+		.model = &bodyforce_perfmodel,
 };
 
 static struct starpu_codelet integratePositions_cl = {
-	.cpu_funcs = {integratePositions_cpu},
+		.cpu_funcs = {integratePositions_cpu},
 
 #ifdef STARPU_USE_CUDA
-	.cuda_funcs = {integratePositions_cuda},
+		.cuda_funcs = {integratePositions_cuda},
 #endif
 
-	.nbuffers = 2,
-	.modes = {STARPU_RW, STARPU_R},
-	.model = &integratepositions_perfmodel,
+		.nbuffers = 2,
+		.modes = {STARPU_RW, STARPU_R},
+		.model = &integratepositions_perfmodel,
 };
 
-int main(const int argc, const char** argv) {
-  int nBodies = 2<<12;
+int main(const int argc, const char **argv)
+{
+	int nBodies = 2 << 12;
 
 #ifndef DEBUG
-  if (argc > 1) nBodies = 2<<atoi(argv[1]);
+	if (argc > 1)
+		nBodies = 2 << atoi(argv[1]);
 #else
 	(void)argc;
 	(void)argv;
 #endif
 
 #ifdef DEBUG
-	const char * initialized_pos = "../debug/initialized_pos_12";
-	const char * initialized_vel = "../debug/initialized_vel_12";
-	const char * computed_pos = "../debug/computed_pos_12";
-	const char * computed_vel = "../debug/computed_vel_12";
+	const char *initialized_pos = "../debug/initialized_pos_12";
+	const char *initialized_vel = "../debug/initialized_vel_12";
+	const char *computed_pos = "../debug/computed_pos_12";
+	const char *computed_vel = "../debug/computed_vel_12";
 #endif
 
 	/* starpu configs */
@@ -92,8 +92,8 @@ int main(const int argc, const char** argv) {
 	int ret = starpu_init(&conf);
 	STARPU_CHECK_RETURN_VALUE(ret, "starpu_init");
 
-	Pos * pos;
-	Vel * vel;
+	Pos *pos;
+	Vel *vel;
 	starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
 	starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
 
@@ -101,70 +101,71 @@ int main(const int argc, const char** argv) {
 	read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
 	read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
 #else
-	for (int i = 0; i < nBodies; i++) {
-		pos[i].x = ((float)rand()/(float)(RAND_MAX)) * 100.0f;
-		pos[i].y = ((float)rand()/(float)(RAND_MAX)) * 100.0f;
-		pos[i].z = ((float)rand()/(float)(RAND_MAX)) * 100.0f;
+	for (int i = 0; i < nBodies; i++)
+	{
+		pos[i].x = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+		pos[i].y = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+		pos[i].z = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
 	}
-	for (int i = 0; i < nBodies; i++) {
-		vel[i].vx = ((float)rand()/(float)(RAND_MAX)) * 10.0f;
-		vel[i].vy = ((float)rand()/(float)(RAND_MAX)) * 10.0f;
-		vel[i].vz = ((float)rand()/(float)(RAND_MAX)) * 10.0f;
+	for (int i = 0; i < nBodies; i++)
+	{
+		vel[i].vx = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+		vel[i].vy = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+		vel[i].vz = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
 	}
 #endif
 
 	/* starpu data handles */
 	starpu_data_handle_t pos_handle;
 	starpu_vector_data_register(
-		&pos_handle,
-		STARPU_MAIN_RAM,
-		(uintptr_t)pos,
-		nBodies,
-		sizeof(Pos)
-	);
+			&pos_handle,
+			STARPU_MAIN_RAM,
+			(uintptr_t)pos,
+			nBodies,
+			sizeof(Pos));
 
 	starpu_data_handle_t vel_handle;
 	starpu_vector_data_register(
-		&vel_handle,
-		STARPU_MAIN_RAM,
-		(uintptr_t)vel,
-		nBodies,
-		sizeof(Vel)
-	);
+			&vel_handle,
+			STARPU_MAIN_RAM,
+			(uintptr_t)vel,
+			nBodies,
+			sizeof(Vel));
 
 	struct starpu_data_filter filter = {
-		.filter_func = starpu_vector_filter_block,
-		.nchildren = PARTS
-	};
-	int * offset = (int *) malloc(sizeof(int) * PARTS);
+			.filter_func = starpu_vector_filter_block,
+			.nchildren = PARTS};
+	int *offset = (int *)malloc(sizeof(int) * PARTS);
 	offset[0] = 0;
-	for (int i = 1; i < PARTS; i++) {
-		offset[i] = offset[i - 1] + nBodies/PARTS;
+	for (int i = 1; i < PARTS; i++)
+	{
+		offset[i] = offset[i - 1] + nBodies / PARTS;
 	}
 
-  const int nIters = 10; 
+	const int nIters = 10;
 	double start = starpu_timing_now();
 
 	starpu_data_partition(vel_handle, &filter);
-	for (int i = 0; i < nIters; i++) {
-		for (int i = 0; i < starpu_data_get_nb_children(vel_handle); i++) {
+	for (int i = 0; i < nIters; i++)
+	{
+		for (int i = 0; i < starpu_data_get_nb_children(vel_handle); i++)
+		{
 			ret = starpu_task_insert(&bodyForce_cl,
-				STARPU_VALUE, &offset[i], sizeof(offset[i]),
-				STARPU_R, pos_handle,
-				STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, i),
-				0
-			);
+															 STARPU_VALUE, &offset[i], sizeof(offset[i]),
+															 STARPU_R, pos_handle,
+															 STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, i),
+															 0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
 		starpu_task_wait_for_all();
 
 		starpu_data_partition(pos_handle, &filter);
-		for (int i = 0; i < starpu_data_get_nb_children(pos_handle); i++) {
+		for (int i = 0; i < starpu_data_get_nb_children(pos_handle); i++)
+		{
 			ret = starpu_task_insert(&integratePositions_cl,
-				STARPU_RW, starpu_data_get_sub_data(pos_handle, 1, i),
-				STARPU_R, starpu_data_get_sub_data(vel_handle, 1, i),
-				0
-			);
+															 STARPU_RW, starpu_data_get_sub_data(pos_handle, 1, i),
+															 STARPU_R, starpu_data_get_sub_data(vel_handle, 1, i),
+															 0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
 		starpu_task_wait_for_all();
@@ -180,10 +181,10 @@ int main(const int argc, const char** argv) {
 #ifdef DEBUG
 	write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
 	write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
-#endif	
+#endif
 
-	starpu_free_noflag(pos, sizeof(Pos) *nBodies);
-	starpu_free_noflag(vel, sizeof(Vel) *nBodies);
+	starpu_free_noflag(pos, sizeof(Pos) * nBodies);
+	starpu_free_noflag(vel, sizeof(Vel) * nBodies);
 
 	starpu_shutdown();
 }
