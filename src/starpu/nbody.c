@@ -34,35 +34,33 @@ extern void integratePositions_cpu(void *buffers[], void *_args);
 extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
-		.type = STARPU_HISTORY_BASED,
-		.symbol = "bodyforce"};
+	.type = STARPU_HISTORY_BASED,
+	.symbol = "bodyforce"};
 
 static struct starpu_perfmodel integratepositions_perfmodel = {
-		.type = STARPU_HISTORY_BASED,
-		.symbol = "integratepositions"};
+	.type = STARPU_HISTORY_BASED,
+	.symbol = "integratepositions"};
 
 static struct starpu_codelet bodyForce_cl = {
-		.cpu_funcs = {bodyForce_cpu},
+	.cpu_funcs = {bodyForce_cpu},
 
 #ifdef STARPU_USE_CUDA
-		.cuda_funcs = {bodyForce_cuda},
+	.cuda_funcs = {bodyForce_cuda},
 #endif
-
-		.nbuffers = 2,
-		.modes = {STARPU_R, STARPU_RW},
-		.model = &bodyforce_perfmodel,
+	.nbuffers = 2,
+	.modes = {STARPU_R, STARPU_RW},
+	.model = &bodyforce_perfmodel,
 };
 
 static struct starpu_codelet integratePositions_cl = {
-		.cpu_funcs = {integratePositions_cpu},
+	.cpu_funcs = {integratePositions_cpu},
 
 #ifdef STARPU_USE_CUDA
-		.cuda_funcs = {integratePositions_cuda},
+	.cuda_funcs = {integratePositions_cuda},
 #endif
-
-		.nbuffers = 2,
-		.modes = {STARPU_RW, STARPU_R},
-		.model = &integratepositions_perfmodel,
+	.nbuffers = 2,
+	.modes = {STARPU_RW, STARPU_R},
+	.model = &integratepositions_perfmodel,
 };
 
 int main(const int argc, const char **argv)
@@ -118,23 +116,23 @@ int main(const int argc, const char **argv)
 	/* starpu data handles */
 	starpu_data_handle_t pos_handle;
 	starpu_vector_data_register(
-			&pos_handle,
-			STARPU_MAIN_RAM,
-			(uintptr_t)pos,
-			nBodies,
-			sizeof(Pos));
+		&pos_handle,
+		STARPU_MAIN_RAM,
+		(uintptr_t)pos,
+		nBodies,
+		sizeof(Pos));
 
 	starpu_data_handle_t vel_handle;
 	starpu_vector_data_register(
-			&vel_handle,
-			STARPU_MAIN_RAM,
-			(uintptr_t)vel,
-			nBodies,
-			sizeof(Vel));
+		&vel_handle,
+		STARPU_MAIN_RAM,
+		(uintptr_t)vel,
+		nBodies,
+		sizeof(Vel));
 
 	struct starpu_data_filter filter = {
-			.filter_func = starpu_vector_filter_block,
-			.nchildren = PARTS};
+		.filter_func = starpu_vector_filter_block,
+		.nchildren = PARTS};
 	int *offset = (int *)malloc(sizeof(int) * PARTS);
 	offset[0] = 0;
 	for (int i = 1; i < PARTS; i++)
@@ -150,11 +148,12 @@ int main(const int argc, const char **argv)
 	{
 		for (int i = 0; i < starpu_data_get_nb_children(vel_handle); i++)
 		{
-			ret = starpu_task_insert(&bodyForce_cl,
-															 STARPU_VALUE, &offset[i], sizeof(offset[i]),
-															 STARPU_R, pos_handle,
-															 STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, i),
-															 0);
+			ret = starpu_task_insert(
+				&bodyForce_cl,
+				STARPU_VALUE, &offset[i], sizeof(offset[i]),
+				STARPU_R, pos_handle,
+				STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, i),
+				0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
 		starpu_task_wait_for_all();
@@ -162,10 +161,11 @@ int main(const int argc, const char **argv)
 		starpu_data_partition(pos_handle, &filter);
 		for (int i = 0; i < starpu_data_get_nb_children(pos_handle); i++)
 		{
-			ret = starpu_task_insert(&integratePositions_cl,
-															 STARPU_RW, starpu_data_get_sub_data(pos_handle, 1, i),
-															 STARPU_R, starpu_data_get_sub_data(vel_handle, 1, i),
-															 0);
+			ret = starpu_task_insert(
+				&integratePositions_cl,
+				STARPU_RW, starpu_data_get_sub_data(pos_handle, 1, i),
+				STARPU_R, starpu_data_get_sub_data(vel_handle, 1, i),
+				0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
 		starpu_task_wait_for_all();
@@ -178,6 +178,7 @@ int main(const int argc, const char **argv)
 
 	double timing = starpu_timing_now() - start; // in microsseconds
 	printf("%lf\n", timing);
+
 #ifdef DEBUG
 	write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
 	write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
