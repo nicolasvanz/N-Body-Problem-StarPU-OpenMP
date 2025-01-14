@@ -146,25 +146,25 @@ int main(const int argc, const char **argv)
 	starpu_data_partition(vel_handle, &filter);
 	for (int i = 0; i < nIters; i++)
 	{
-		for (int i = 0; i < starpu_data_get_nb_children(vel_handle); i++)
+		for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++)
 		{
 			ret = starpu_task_insert(
 				&bodyForce_cl,
-				STARPU_VALUE, &offset[i], sizeof(offset[i]),
+				STARPU_VALUE, &offset[j], sizeof(offset[j]),
 				STARPU_R, pos_handle,
-				STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, i),
+				STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, j),
 				0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
 		starpu_task_wait_for_all();
 
 		starpu_data_partition(pos_handle, &filter);
-		for (int i = 0; i < starpu_data_get_nb_children(pos_handle); i++)
+		for (int j = 0; j < starpu_data_get_nb_children(pos_handle); j++)
 		{
 			ret = starpu_task_insert(
 				&integratePositions_cl,
-				STARPU_RW, starpu_data_get_sub_data(pos_handle, 1, i),
-				STARPU_R, starpu_data_get_sub_data(vel_handle, 1, i),
+				STARPU_RW, starpu_data_get_sub_data(pos_handle, 1, j),
+				STARPU_R, starpu_data_get_sub_data(vel_handle, 1, j),
 				0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
