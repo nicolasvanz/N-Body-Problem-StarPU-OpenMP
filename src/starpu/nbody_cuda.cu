@@ -17,17 +17,17 @@
 #include <starpu.h>
 #include "../include/body.h"
 
-static __global__ void bodyForce(Pos *p, Vel *v, int n, int offset)
+static __global__ void bodyForce(Pos *p, Vel *v, int nPos, int nVel, int offset)
 {
 	int initialIndex = threadIdx.x + blockIdx.x * blockDim.x;
 	int stride = blockDim.x * gridDim.x;
-	for (int i = initialIndex; i < n; i += stride)
+	for (int i = initialIndex; i < nVel; i += stride)
 	{
 		float Fx = 0.0f;
 		float Fy = 0.0f;
 		float Fz = 0.0f;
 
-		for (int j = 0; j < n; j++)
+		for (int j = 0; j < nPos; j++)
 		{
 			float dx = p[j].x - p[i + offset].x;
 			float dy = p[j].y - p[i + offset].y;
@@ -47,26 +47,27 @@ static __global__ void bodyForce(Pos *p, Vel *v, int n, int offset)
 	}
 }
 
-static __global__ void integratePositions(Pos *p, Vel *v, int n)
+static __global__ void integratePositions(Pos *p, Vel *v, int n, int offset)
 {
 	int initialIndex = threadIdx.x + blockIdx.x * blockDim.x;
 	int stride = blockDim.x * gridDim.x;
 	for (int i = initialIndex; i < n; i += stride)
 	{ // integrate position
-		p[i].x += v[i].vx * dt;
-		p[i].y += v[i].vy * dt;
-		p[i].z += v[i].vz * dt;
+		p[i + offset].x += v[i].vx * dt;
+		p[i + offset].y += v[i].vy * dt;
+		p[i + offset].z += v[i].vz * dt;
 	}
 }
 
 extern "C" void bodyForce_cuda(void *buffers[], void *_args)
 {
 	/* length of the vector */
-	unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
+	unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);
+	unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
 
 	/* local copy of the vector pointer */
-	Pos *pos = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
-	Vel *vel = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+	Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+	Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
 	/* extract the value arguments */
 	int offset;
@@ -75,7 +76,7 @@ extern "C" void bodyForce_cuda(void *buffers[], void *_args)
 	unsigned threads_per_block = 64;
 	unsigned nblocks = 60;
 
-	bodyForce<<<nblocks, threads_per_block, 0, starpu_cuda_get_local_stream()>>>(pos, vel, n, offset);
+	bodyForce<<<nblocks, threads_per_block, 0, starpu_cuda_get_local_stream()>>>(p, v, nPos, nVel, offset);
 
 	cudaStreamSynchronize(starpu_cuda_get_local_stream());
 }
@@ -83,16 +84,20 @@ extern "C" void bodyForce_cuda(void *buffers[], void *_args)
 extern "C" void integratePositions_cuda(void *buffers[], void *_args)
 {
 	/* length of the vector */
-	unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
+	unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
 
 	/* local copy of the vector pointer */
-	Pos *pos = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
-	Vel *vel = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+	Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+	Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+
+	/* extract the value arguments */
+	int offset;
+	starpu_codelet_unpack_args(_args, &offset);
 
 	unsigned threads_per_block = 64;
-	unsigned nblocks = (n + threads_per_block - 1) / threads_per_block;
+	unsigned nblocks = (nVel + threads_per_block - 1) / threads_per_block;
 
-	integratePositions<<<nblocks, threads_per_block, 0, starpu_cuda_get_local_stream()>>>(pos, vel, n);
+	integratePositions<<<nblocks, threads_per_block, 0, starpu_cuda_get_local_stream()>>>(p, v, nVel, offset);
 
 	cudaStreamSynchronize(starpu_cuda_get_local_stream());
 }

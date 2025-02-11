@@ -25,8 +25,8 @@
 #include "../include/body.h"
 #include "../include/files.h"
 
-// #define DEBUG
-#define PARTS 1
+#define DEBUG
+#define PARTS 8
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void bodyForce_cuda(void *buffers[], void *_args);
@@ -156,20 +156,17 @@ int main(const int argc, const char **argv)
 				0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
-		starpu_task_wait_for_all();
 
-		starpu_data_partition(pos_handle, &filter);
-		for (int j = 0; j < starpu_data_get_nb_children(pos_handle); j++)
+		for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++)
 		{
 			ret = starpu_task_insert(
 				&integratePositions_cl,
-				STARPU_RW, starpu_data_get_sub_data(pos_handle, 1, j),
+				STARPU_VALUE, &offset[j], sizeof(offset[j]),
+				STARPU_RW, pos_handle,
 				STARPU_R, starpu_data_get_sub_data(vel_handle, 1, j),
 				0);
 			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
 		}
-		starpu_task_wait_for_all();
-		starpu_data_unpartition(pos_handle, STARPU_MAIN_RAM);
 	}
 
 	starpu_data_unpartition(vel_handle, STARPU_MAIN_RAM);

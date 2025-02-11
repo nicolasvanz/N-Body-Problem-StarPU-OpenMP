@@ -20,19 +20,21 @@
 
 void integratePositions_cpu(void *buffers[], void *_args)
 {
-	(void)_args;
 	/* length of the vector */
-	unsigned int n = STARPU_VECTOR_GET_NX(buffers[1]);
+	unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
 
 	/* local copy of the vector pointer */
 	Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
 	Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
-	for (unsigned i = 0; i < n; i++)
+	int offset;
+	starpu_codelet_unpack_args(_args, &offset);
+
+	for (unsigned i = 0; i < nVel; i++)
 	{
-		p[i].x += v[i].vx * dt;
-		p[i].y += v[i].vy * dt;
-		p[i].z += v[i].vz * dt;
+		p[i + offset].x += v[i].vx * dt;
+		p[i + offset].y += v[i].vy * dt;
+		p[i + offset].z += v[i].vz * dt;
 	}
 }
 
