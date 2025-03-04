@@ -112,3 +112,9 @@ function openmp_cpu_gpu
 }
 
 starpu_gpu
+starpu_cpu
+starpu_gpu
+starpu_cpu_gpu
+openmp_cpu
+openmp_gpu
+openmp_cpu_gpu
