@@ -73,10 +73,12 @@ int main(const int argc, const char **argv) {
 #endif
 
 #ifdef DEBUG
-  const char *initialized_pos = "~/nbody/src/debug/initialized_pos_12";
-  const char *initialized_vel = "~/nbody/src/debug/initialized_vel_12";
-  const char *computed_pos = "~/nbody/src/debug/computed_pos_12";
-  const char *computed_vel = "~/nbody/src/debug/computed_vel_12";
+  const char *initialized_pos =
+      "/home/ec2-user/nbody/src/debug/initialized_pos_12";
+  const char *initialized_vel =
+      "/home/ec2-user/nbody/src/debug/initialized_vel_12";
+  const char *computed_pos = "/home/ec2-user/nbody/src/debug/computed_pos_12";
+  const char *computed_vel = "/home/ec2-user/nbody/src/debug/computed_vel_12";
 #endif
 
   /* starpu configs */
