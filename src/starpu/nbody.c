@@ -21,9 +21,9 @@
  *  2- how to submit a task to StarPU
  *  3- how a kernel can manipulate the data (buffers[0].vector.ptr)
  */
-#include <starpu.h>
 #include "../include/body.h"
 #include "../include/files.h"
+#include <starpu.h>
 
 #define DEBUG
 #define PARTS 8
@@ -34,155 +34,132 @@ extern void integratePositions_cpu(void *buffers[], void *_args);
 extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
-	.type = STARPU_HISTORY_BASED,
-	.symbol = "bodyforce"};
+    .type = STARPU_HISTORY_BASED, .symbol = "bodyforce"};
 
 static struct starpu_perfmodel integratepositions_perfmodel = {
-	.type = STARPU_HISTORY_BASED,
-	.symbol = "integratepositions"};
+    .type = STARPU_HISTORY_BASED, .symbol = "integratepositions"};
 
 static struct starpu_codelet bodyForce_cl = {
-	.cpu_funcs = {bodyForce_cpu},
+    .cpu_funcs = {bodyForce_cpu},
 
 #ifdef STARPU_USE_CUDA
-	.cuda_funcs = {bodyForce_cuda},
+    .cuda_funcs = {bodyForce_cuda},
 #endif
-	.nbuffers = 2,
-	.modes = {STARPU_R, STARPU_RW},
-	.model = &bodyforce_perfmodel,
+    .nbuffers = 2,
+    .modes = {STARPU_R, STARPU_RW},
+    .model = &bodyforce_perfmodel,
 };
 
 static struct starpu_codelet integratePositions_cl = {
-	.cpu_funcs = {integratePositions_cpu},
+    .cpu_funcs = {integratePositions_cpu},
 
 #ifdef STARPU_USE_CUDA
-	.cuda_funcs = {integratePositions_cuda},
+    .cuda_funcs = {integratePositions_cuda},
 #endif
-	.nbuffers = 2,
-	.modes = {STARPU_RW, STARPU_R},
-	.model = &integratepositions_perfmodel,
+    .nbuffers = 2,
+    .modes = {STARPU_RW, STARPU_R},
+    .model = &integratepositions_perfmodel,
 };
 
-int main(const int argc, const char **argv)
-{
-	int nBodies = 2 << 12;
+int main(const int argc, const char **argv) {
+  int nBodies = 2 << 12;
 
 #ifndef DEBUG
-	if (argc > 1)
-		nBodies = 2 << atoi(argv[1]);
+  if (argc > 1)
+    nBodies = 2 << atoi(argv[1]);
 #else
-	(void)argc;
-	(void)argv;
+  (void)argc;
+  (void)argv;
 #endif
 
 #ifdef DEBUG
-	const char *initialized_pos = "../debug/initialized_pos_12";
-	const char *initialized_vel = "../debug/initialized_vel_12";
-	const char *computed_pos = "../debug/computed_pos_12";
-	const char *computed_vel = "../debug/computed_vel_12";
+  const char *initialized_pos = "~/nbody/src/debug/initialized_pos_12";
+  const char *initialized_vel = "~/nbody/src/debug/initialized_vel_12";
+  const char *computed_pos = "~/nbody/src/debug/computed_pos_12";
+  const char *computed_vel = "~/nbody/src/debug/computed_vel_12";
 #endif
 
-	/* starpu configs */
-	struct starpu_conf conf;
-	starpu_conf_init(&conf);
-	conf.sched_policy_name = "dmda";
+  /* starpu configs */
+  struct starpu_conf conf;
+  starpu_conf_init(&conf);
+  conf.sched_policy_name = "dmda";
 
-	int ret = starpu_init(&conf);
-	STARPU_CHECK_RETURN_VALUE(ret, "starpu_init");
+  int ret = starpu_init(&conf);
+  STARPU_CHECK_RETURN_VALUE(ret, "starpu_init");
 
-	Pos *pos;
-	Vel *vel;
-	starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
-	starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
+  Pos *pos;
+  Vel *vel;
+  starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
+  starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
 
 #ifdef DEBUG
-	read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
-	read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
+  read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
+  read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
 #else
-	for (int i = 0; i < nBodies; i++)
-	{
-		pos[i].x = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-		pos[i].y = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-		pos[i].z = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-	}
-	for (int i = 0; i < nBodies; i++)
-	{
-		vel[i].vx = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-		vel[i].vy = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-		vel[i].vz = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-	}
+  for (int i = 0; i < nBodies; i++) {
+    pos[i].x = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+    pos[i].y = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+    pos[i].z = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+  }
+  for (int i = 0; i < nBodies; i++) {
+    vel[i].vx = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+    vel[i].vy = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+    vel[i].vz = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+  }
 #endif
 
-	/* starpu data handles */
-	starpu_data_handle_t pos_handle;
-	starpu_vector_data_register(
-		&pos_handle,
-		STARPU_MAIN_RAM,
-		(uintptr_t)pos,
-		nBodies,
-		sizeof(Pos));
+  /* starpu data handles */
+  starpu_data_handle_t pos_handle;
+  starpu_vector_data_register(&pos_handle, STARPU_MAIN_RAM, (uintptr_t)pos,
+                              nBodies, sizeof(Pos));
 
-	starpu_data_handle_t vel_handle;
-	starpu_vector_data_register(
-		&vel_handle,
-		STARPU_MAIN_RAM,
-		(uintptr_t)vel,
-		nBodies,
-		sizeof(Vel));
+  starpu_data_handle_t vel_handle;
+  starpu_vector_data_register(&vel_handle, STARPU_MAIN_RAM, (uintptr_t)vel,
+                              nBodies, sizeof(Vel));
 
-	struct starpu_data_filter filter = {
-		.filter_func = starpu_vector_filter_block,
-		.nchildren = PARTS};
-	int *offset = (int *)malloc(sizeof(int) * PARTS);
-	offset[0] = 0;
-	for (int i = 1; i < PARTS; i++)
-	{
-		offset[i] = offset[i - 1] + nBodies / PARTS;
-	}
+  struct starpu_data_filter filter = {.filter_func = starpu_vector_filter_block,
+                                      .nchildren = PARTS};
+  int *offset = (int *)malloc(sizeof(int) * PARTS);
+  offset[0] = 0;
+  for (int i = 1; i < PARTS; i++) {
+    offset[i] = offset[i - 1] + nBodies / PARTS;
+  }
 
-	const int nIters = 10;
-	double start = starpu_timing_now();
+  const int nIters = 10;
+  double start = starpu_timing_now();
 
-	starpu_data_partition(vel_handle, &filter);
-	for (int i = 0; i < nIters; i++)
-	{
-		for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++)
-		{
-			ret = starpu_task_insert(
-				&bodyForce_cl,
-				STARPU_VALUE, &offset[j], sizeof(offset[j]),
-				STARPU_R, pos_handle,
-				STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, j),
-				0);
-			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
-		}
+  starpu_data_partition(vel_handle, &filter);
+  for (int i = 0; i < nIters; i++) {
+    for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++) {
+      ret = starpu_task_insert(
+          &bodyForce_cl, STARPU_VALUE, &offset[j], sizeof(offset[j]), STARPU_R,
+          pos_handle, STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, j), 0);
+      STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
+    }
 
-		for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++)
-		{
-			ret = starpu_task_insert(
-				&integratePositions_cl,
-				STARPU_VALUE, &offset[j], sizeof(offset[j]),
-				STARPU_RW, pos_handle,
-				STARPU_R, starpu_data_get_sub_data(vel_handle, 1, j),
-				0);
-			STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
-		}
-	}
+    for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++) {
+      ret =
+          starpu_task_insert(&integratePositions_cl, STARPU_VALUE, &offset[j],
+                             sizeof(offset[j]), STARPU_RW, pos_handle, STARPU_R,
+                             starpu_data_get_sub_data(vel_handle, 1, j), 0);
+      STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
+    }
+  }
 
-	starpu_data_unpartition(vel_handle, STARPU_MAIN_RAM);
-	starpu_data_unregister(pos_handle);
-	starpu_data_unregister(vel_handle);
+  starpu_data_unpartition(vel_handle, STARPU_MAIN_RAM);
+  starpu_data_unregister(pos_handle);
+  starpu_data_unregister(vel_handle);
 
-	double timing = starpu_timing_now() - start; // in microsseconds
-	printf("%lf\n", timing);
+  double timing = starpu_timing_now() - start; // in microsseconds
+  printf("%lf\n", timing);
 
 #ifdef DEBUG
-	write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
-	write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
+  write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
+  write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
 #endif
 
-	starpu_free_noflag(pos, sizeof(Pos) * nBodies);
-	starpu_free_noflag(vel, sizeof(Vel) * nBodies);
+  starpu_free_noflag(pos, sizeof(Pos) * nBodies);
+  starpu_free_noflag(vel, sizeof(Vel) * nBodies);
 
-	starpu_shutdown();
+  starpu_shutdown();
 }
