@@ -15,6 +15,15 @@ services:
       - ./results:/home/results
       - ./experiments.sh:/home/experiments.sh
       - ./const.sh:/home/const.sh
+  starpu-cpu: # only cpu mapped
+    build:
+      dockerfile: Dockerfile.starpu
+    command: bash
+    volumes:
+      - ./src:/home/src
+      - ./results:/home/results
+      - ./experiments.sh:/home/experiments.sh
+      - ./const.sh:/home/const.sh
   openmp:
     build:
       dockerfile: Dockerfile.openmp
@@ -26,6 +35,10 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+  openmp-cpu:
+    build:
+      dockerfile: Dockerfile.openmp
+    command: bash
     volumes:
       - ./src:/home/src
       - ./results:/home/results

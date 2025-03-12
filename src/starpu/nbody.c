@@ -25,8 +25,8 @@
 #include "../include/body.h"
 #include "../include/files.h"
 
-#define DEBUG
-#define PARTS 8
+// #define DEBUG
+#define PARTS 4
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void bodyForce_cuda(void *buffers[], void *_args);
