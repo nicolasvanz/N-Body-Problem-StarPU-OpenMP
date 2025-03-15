@@ -6,15 +6,15 @@
 int main(int argc, char **argv)
 {
 	const char *binFilenames[NFILES] = {
-		"debug/computed_pos_12",
-		"debug/solution_pos_12",
-		"debug/computed_vel_12",
-		"debug/solution_vel_12"};
+		"../debug/computed_pos_12",
+		"../debug/solution_pos_12",
+		"../debug/computed_vel_12",
+		"../debug/solution_vel_12"};
 	const char *txtFilenames[NFILES] = {
-		"debug/computed_pos_12.txt",
-		"debug/solution_pos_12.txt",
-		"debug/computed_vel_12.txt",
-		"debug/solution_vel_12.txt"};
+		"../debug/computed_pos_12.txt",
+		"../debug/solution_pos_12.txt",
+		"../debug/computed_vel_12.txt",
+		"../debug/solution_vel_12.txt"};
 
 	for (int i = 0; i < NFILES; i++)
 	{

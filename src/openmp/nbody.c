@@ -1,10 +1,11 @@
-#include "../include/body.h"
-#include "../include/files.h"
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-// #define DEBUG
+#include "../include/body.h"
+#include "../include/files.h"
+
+#define DEBUG
 #define BODYFORCE_USE_CPU 1
 #define INTEGRATEPOSITIONS_USE_CPU 1
 
@@ -17,23 +18,21 @@ int main(const int argc, const char **argv) {
   int nBodies = 2 << 12;
 
 #ifndef DEBUG
-  if (argc > 1)
-    nBodies = 2 << atoi(argv[1]);
+  if (argc > 1) nBodies = 2 << atoi(argv[1]);
 #else
   (void)argc;
   (void)argv;
+  printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
 #endif
 
   Pos *pos = (Pos *)(malloc(sizeof(Pos) * nBodies));
   Vel *vel = (Vel *)(malloc(sizeof(Vel) * nBodies));
 
 #ifdef DEBUG
-  const char *initialized_pos =
-      "/home/ec2-user/nbody/src/debug/initialized_pos_12";
-  const char *initialized_vel =
-      "/home/ec2-user/nbody/src/debug/initialized_vel_12";
-  const char *computed_pos = "/home/ec2-user/nbody/src/debug/computed_pos_12";
-  const char *computed_vel = "/home/ec2-user/nbody/src/debug/computed_vel_12";
+  const char *initialized_pos = "../debug/initialized_pos_12";
+  const char *initialized_vel = "../debug/initialized_vel_12";
+  const char *computed_pos = "../debug/computed_pos_12";
+  const char *computed_vel = "../debug/computed_vel_12";
 #endif
 
 #ifdef DEBUG
@@ -72,7 +71,7 @@ int main(const int argc, const char **argv) {
     integratePositions_gpu(pos, vel, nBodies);
 #endif
   }
-  printf("%lf\n", omp_get_wtime() - start); // seconds
+  printf("%lf\n", omp_get_wtime() - start);  // seconds
 
 #ifdef DEBUG
   write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);

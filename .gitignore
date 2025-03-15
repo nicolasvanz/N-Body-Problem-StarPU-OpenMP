@@ -52,6 +52,7 @@ Mkfile.old
 dkms.conf
 
 nbody
+bin2txt
 *computed_pos*
 *computed_vel*
 *.txt

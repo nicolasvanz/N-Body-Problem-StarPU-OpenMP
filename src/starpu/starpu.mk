@@ -33,3 +33,4 @@ clean:
 	rm -f $(PROGS) *.o */*.o */*/*.o
 	rm -f paje.trace dag.dot *.rec trace.html starpu.log
 	rm -f *.gp *.eps *.data
+	rm -f bin2txt

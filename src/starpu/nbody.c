@@ -68,17 +68,16 @@ int main(const int argc, const char **argv) {
 #ifndef DEBUG
   if (argc > 1) nBodies = 2 << atoi(argv[1]);
 #else
+  printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
   (void)argc;
   (void)argv;
 #endif
 
 #ifdef DEBUG
-  const char *initialized_pos =
-      "/home/ec2-user/nbody/src/debug/initialized_pos_12";
-  const char *initialized_vel =
-      "/home/ec2-user/nbody/src/debug/initialized_vel_12";
-  const char *computed_pos = "/home/ec2-user/nbody/src/debug/computed_pos_12";
-  const char *computed_vel = "/home/ec2-user/nbody/src/debug/computed_vel_12";
+  const char *initialized_pos = "../debug/initialized_pos_12";
+  const char *initialized_vel = "../debug/initialized_vel_12";
+  const char *computed_pos = "../debug/computed_pos_12";
+  const char *computed_vel = "../debug/computed_vel_12";
 #endif
 
   /* starpu configs */
