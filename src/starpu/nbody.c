@@ -21,12 +21,13 @@
  *  2- how to submit a task to StarPU
  *  3- how a kernel can manipulate the data (buffers[0].vector.ptr)
  */
-#include "../include/body.h"
-#include "../include/files.h"
 #include <starpu.h>
 
+#include "../include/body.h"
+#include "../include/files.h"
+
 #define DEBUG
-#define PARTS 8
+#define PARTS 7
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void bodyForce_cuda(void *buffers[], void *_args);
@@ -65,8 +66,7 @@ int main(const int argc, const char **argv) {
   int nBodies = 2 << 12;
 
 #ifndef DEBUG
-  if (argc > 1)
-    nBodies = 2 << atoi(argv[1]);
+  if (argc > 1) nBodies = 2 << atoi(argv[1]);
 #else
   (void)argc;
   (void)argv;
@@ -121,6 +121,7 @@ int main(const int argc, const char **argv) {
 
   struct starpu_data_filter filter = {.filter_func = starpu_vector_filter_block,
                                       .nchildren = PARTS};
+
   int *offset = (int *)malloc(sizeof(int) * PARTS);
   offset[0] = 0;
   for (int i = 1; i < PARTS; i++) {
@@ -152,7 +153,7 @@ int main(const int argc, const char **argv) {
   starpu_data_unregister(pos_handle);
   starpu_data_unregister(vel_handle);
 
-  double timing = starpu_timing_now() - start; // in microsseconds
+  double timing = starpu_timing_now() - start;  // in microsseconds
   printf("%lf\n", timing);
 
 #ifdef DEBUG
