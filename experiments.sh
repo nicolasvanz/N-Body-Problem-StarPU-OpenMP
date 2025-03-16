@@ -19,6 +19,8 @@ function run_replications
 
   (cd $dir_results && mkdir -p $prefix)
   eval "$command" #calibrate
+  eval "$command" #calibrate
+  eval "$command" #calibrate
   for i in {1..7}
   do
     eval "$command" > "$dir_results/$prefix/$i"
@@ -28,7 +30,7 @@ function run_replications
 function starpu_gpu
 {
   (cd $dir_starpu && make clean && make)
-  for n in {11..17}
+  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
   do
     prefix="starpu_gpu-$n"
     run="STARPU_NCPU=0 $dir_starpu/nbody $n"
@@ -40,39 +42,39 @@ function starpu_cpu
 {
   starpu_parts_macro="#define PARTS"
   starpu_parts_default="$starpu_parts_macro 1"
-  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro 8"
+  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro $experiments_starpu_parts"
   (cd $dir_starpu && make clean && make)
-  for n in {11..17}
+  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
   do
     prefix="starpu_cpu-$n"
     run="STARPU_NCUDA=0 $dir_starpu/nbody $n"
     run_replications "$run" "$prefix"
   done
-  replace "$dir_starpu" "$starpu_macro 8" "$starpu_parts_default"
+  replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
 }
 
 function starpu_cpu_gpu
 {
   starpu_parts_macro="#define PARTS"
   starpu_parts_default="$starpu_parts_macro 1"
-  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro 8"
+  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro $experiments_starpu_parts"
   (cd $dir_starpu && make clean && make)
-  for n in {11..17}
+  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
   do
     prefix="starpu_cpu_gpu-$n"
     run="$dir_starpu/nbody $n"
     run_replications "$run" "$prefix"
   done
-  replace "$dir_starpu" "$starpu_parts_macro 8" "$starpu_parts_default"
+  replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
 }
 
 function openmp_cpu
 {
   (cd $dir_openmp && make clean && make)
-  for n in {11..17}
+  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
   do
     prefix="openmp_cpu-$n"
-    run="OMP_NUM_THREADS=8 $dir_openmp/nbody $n"
+    run="OMP_NUM_THREADS=$experiments_omp_threads $dir_openmp/nbody $n"
     run_replications "$run" "$prefix"
   done
 }
@@ -86,10 +88,10 @@ function openmp_gpu
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_default" "$openmp_bodyforce_use_cpu_macro 0"
   replace "$dir_openmp" "$openmp_integratepositions_use_cpu_default" "$openmp_integratepositions_use_cpu_macro 0"
   (cd $dir_openmp && make clean && make)
-  for n in {11..17}
+  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
   do
     prefix="openmp_gpu-$n"
-    run="OMP_NUM_THREADS=8 $dir_openmp/nbody $n"
+    run="OMP_NUM_THREADS=$experiments_omp_threads $dir_openmp/nbody $n"
     run_replications "$run" "$prefix"
   done
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_macro 0" "$openmp_bodyforce_use_cpu_default"
@@ -102,10 +104,10 @@ function openmp_cpu_gpu
   openmp_bodyforce_use_cpu_default="$openmp_bodyforce_use_cpu_macro 1"
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_default" "$openmp_bodyforce_use_cpu_macro 0"
   (cd $dir_openmp && make clean && make)
-  for n in {11..17}
+  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
   do
     prefix="openmp_cpu_gpu-$n"
-    run="OMP_NUM_THREADS=8 $dir_openmp/nbody $n"
+    run="OMP_NUM_THREADS=$experiments_omp_threads $dir_openmp/nbody $n"
     run_replications "$run" "$prefix"
   done
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_macro 0" "$openmp_bodyforce_use_cpu_default"
@@ -113,7 +115,6 @@ function openmp_cpu_gpu
 
 starpu_gpu
 starpu_cpu
-starpu_gpu
 starpu_cpu_gpu
 openmp_cpu
 openmp_gpu

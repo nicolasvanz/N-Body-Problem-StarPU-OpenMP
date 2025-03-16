@@ -1,6 +1,7 @@
 /* StarPU --- Runtime system for heterogeneous multicore architectures.
  *
- * Copyright (C) 2010-2024  University of Bordeaux, CNRS (LaBRI UMR 5800), Inria
+ * Copyright (C) 2010-2024  University of Bordeaux, CNRS (LaBRI UMR 5800),
+ * Inria
  *
  * StarPU is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -26,8 +27,8 @@
 #include "../include/body.h"
 #include "../include/files.h"
 
-#define DEBUG
-#define PARTS 7
+// #define DEBUG
+#define PARTS 1
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void bodyForce_cuda(void *buffers[], void *_args);
@@ -121,29 +122,21 @@ int main(const int argc, const char **argv) {
   struct starpu_data_filter filter = {.filter_func = starpu_vector_filter_block,
                                       .nchildren = PARTS};
 
-  int *offset = (int *)malloc(sizeof(int) * PARTS);
-  offset[0] = 0;
-  for (int i = 1; i < PARTS; i++) {
-    offset[i] = offset[i - 1] + nBodies / PARTS;
-  }
-
   const int nIters = 10;
   double start = starpu_timing_now();
 
   starpu_data_partition(vel_handle, &filter);
   for (int i = 0; i < nIters; i++) {
     for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++) {
-      ret = starpu_task_insert(
-          &bodyForce_cl, STARPU_VALUE, &offset[j], sizeof(offset[j]), STARPU_R,
-          pos_handle, STARPU_RW, starpu_data_get_sub_data(vel_handle, 1, j), 0);
+      ret = starpu_task_insert(&bodyForce_cl, STARPU_R, pos_handle, STARPU_RW,
+                               starpu_data_get_sub_data(vel_handle, 1, j), 0);
       STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
     }
 
     for (int j = 0; j < starpu_data_get_nb_children(vel_handle); j++) {
-      ret =
-          starpu_task_insert(&integratePositions_cl, STARPU_VALUE, &offset[j],
-                             sizeof(offset[j]), STARPU_RW, pos_handle, STARPU_R,
-                             starpu_data_get_sub_data(vel_handle, 1, j), 0);
+      ret = starpu_task_insert(&integratePositions_cl, STARPU_RW, pos_handle,
+                               STARPU_R,
+                               starpu_data_get_sub_data(vel_handle, 1, j), 0);
       STARPU_CHECK_RETURN_VALUE(ret, "starpu_task_insert");
     }
   }

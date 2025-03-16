@@ -18,3 +18,8 @@ dir_current=$PWD
 dir_results=$dir_current/results
 dir_starpu=$dir_current/src/starpu
 dir_openmp=$dir_current/src/openmp
+
+nbodies_initial_index=12
+nbodies_final_index=18
+experiments_starpu_parts=15
+experiments_omp_threads=16
