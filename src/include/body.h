@@ -5,7 +5,7 @@
 
 static inline float my_rsqrtf(float x)
 {
-    return 1 / sqrt(x);
+    return 1.0f / (float)sqrt((double)x);
 }
 
 typedef struct
