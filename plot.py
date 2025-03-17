@@ -2,12 +2,15 @@ import os
 import matplotlib.pyplot as plt
 
 results_dir = "results"
-experiment = "openmp_cpu-"
+experiment_prefixes = ["openmp_cpu", "openmp_gpu", "openmp_cpu_gpu", "starpu_cpu", "starpu_gpu", "starpu_cpu_gpu"]
+experiment_nbodies_start=12
+experiment_nbodies_end=17
+
 data = {}
 
-for experiment in ["openmp_cpu", "openmp_gpu", "openmp_cpu_gpu", "starpu_cpu", "starpu_gpu", "starpu_cpu_gpu"]:
+for experiment in experiment_prefixes:
     experiment+="-"
-    for folder in [experiment+str(i) for i in range(11,18)]:
+    for folder in [experiment+str(i) for i in range(experiment_nbodies_start,experiment_nbodies_end+1)]:
         folderpath = os.path.join(results_dir, folder)
         for file in [str(i) for i in range(1, 8)]:
             times = []
