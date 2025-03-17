@@ -113,9 +113,21 @@ function openmp_cpu_gpu
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_macro 0" "$openmp_bodyforce_use_cpu_default"
 }
 
-starpu_gpu
-starpu_cpu
-starpu_cpu_gpu
-openmp_cpu
-openmp_gpu
-openmp_cpu_gpu
+if [ $# -lt 1 ]; then
+    echo "no arguments"
+    exit 1
+fi
+
+if [ "$1" == "starpu" ]; then
+    echo "starpu experiments..."
+    starpu_cpu
+    starpu_gpu
+    starpu_cpu_gpu
+elif [ "$1" == "openmp" ]; then
+    echo "openmp experiments..."
+    openmp_cpu
+    openmp_gpu
+    openmp_cpu_gpu
+else
+    echo "Unknown command: $1"
+fi
