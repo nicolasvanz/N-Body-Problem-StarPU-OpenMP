@@ -1,32 +1,62 @@
 import os
 import matplotlib.pyplot as plt
+import numpy as np
 
 results_dir = "results"
-experiment = "openmp_cpu-"
-data = {}
+experiments = ["cpu"]
+data = {exp: {"openmp": {}, "starpu": {}} for exp in experiments}
+experiments_nbodies_start = 12
+experiments_nbodies_end = 17
+experiments_nruns = 3
 
-for experiment in ["openmp_cpu", "openmp_gpu", "openmp_cpu_gpu", "starpu_cpu", "starpu_gpu", "starpu_cpu_gpu"]:
-    experiment+="-"
-    for folder in [experiment+str(i) for i in range(11,18)]:
-        folderpath = os.path.join(results_dir, folder)
-        for file in [str(i) for i in range(1, 8)]:
+for exp in experiments:
+    for tool in ["openmp", "starpu"]:
+        prefix = f"{tool}_{exp}-"
+        for folder in [prefix + str(i) for i in range(experiments_nbodies_start, experiments_nbodies_end + 1)]:
+            folderpath = os.path.join(results_dir, folder)
             times = []
-            with open(os.path.join(folderpath, file), "r") as f:
-                times.append(float(f.read().strip()))
-        data[folder[-2:]] = sum(times) / len(times)
-        if experiment.startswith("starpu"):
-            data[folder[-2:]] /= 1000000
+            for file in [str(i) for i in range(1, experiments_nruns + 1)]:
+                with open(os.path.join(folderpath, file), "r") as f:
+                    times.append(float(f.read().strip()))
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(data.keys(), data.values())
-    for i,j in zip(data.keys(),data.values()):
-        plt.annotate('%.2f' % j, xy=(i,j))
+            avg_time = sum(times) / len(times)
+            if tool == "starpu":
+                avg_time /= 1_000_000  # Convert to seconds
 
-    plt.title(" ".join(experiment[:-1].split("_")))
-    plt.xlabel("number of molecules (2^n)")
+            data[exp][tool][folder[-2:]] = avg_time
+
+os.makedirs("plots", exist_ok=True)
+for exp in experiments:
+    keys = sorted(data[exp]["openmp"].keys())  # Sorted molecule counts
+    openmp_values = [data[exp]["openmp"][k] for k in keys]
+    starpu_values = [data[exp]["starpu"][k] for k in keys]
+
+    x = np.arange(len(keys))  # Label positions
+    width = 0.4  # Increased bar width to reduce spacing
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(x - width / 2, openmp_values, width, label="OpenMP")
+    plt.bar(x + width / 2, starpu_values, width, label="StarPU")
+
+    # Add text labels
+    for i, (o, s) in enumerate(zip(openmp_values, starpu_values)):
+        plt.text(x[i] - width / 2, o, f"{o:.2f}", ha="center", va="bottom", fontsize=10)
+        plt.text(x[i] + width / 2, s, f"{s:.2f}", ha="center", va="bottom", fontsize=10)
+
+    keys = map(lambda x: "%d" % (int(x) + 1), keys)
+    plt.xticks(x, keys)
+    plt.xlabel("Number of Particles (2^n)")
     plt.ylabel("Execution Time (s)")
-
-    plt.grid(True)
+    plt.title(f"OpenMP vs StarPU - {exp.replace('_', ' ').upper()}")
+    
+    # Adjusted legend placement at bottom
+    plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2)
+    
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
     plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15)  # Ensure space for legend at the bottom
 
-    plt.savefig("plots/%s" % experiment[:-1])
+    plt.savefig(f"plots/{exp}.png")
+    plt.close()
+
+print("Plots saved")
