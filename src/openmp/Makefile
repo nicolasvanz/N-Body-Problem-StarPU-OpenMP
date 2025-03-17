@@ -2,10 +2,10 @@
 CC = clang
 
 # CFLAGS = -fopenmp -fopenmp-targets=nvptx64 -O3 -Wall -std=c99
-CFLAGS = -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_75 -O3 -Wall -std=c99
+CFLAGS = -fopenmp -O3 -Wall -std=c99
 
 # Source files and target
-SRCS = nbody.c nbody_cpu.c nbody_gpu.c 
+SRCS = nbody.c nbody_cpu.c
 OBJS = $(SRCS:.c=.o)
 TARGET = nbody
 

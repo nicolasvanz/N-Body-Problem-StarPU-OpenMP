@@ -21,7 +21,7 @@ function run_replications
   eval "$command" #calibrate
   eval "$command" #calibrate
   eval "$command" #calibrate
-  for i in {1..7}
+  for i in {1..3}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
@@ -113,9 +113,5 @@ function openmp_cpu_gpu
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_macro 0" "$openmp_bodyforce_use_cpu_default"
 }
 
-starpu_gpu
 starpu_cpu
-starpu_cpu_gpu
 openmp_cpu
-openmp_gpu
-openmp_cpu_gpu

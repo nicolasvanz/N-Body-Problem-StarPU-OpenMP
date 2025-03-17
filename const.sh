@@ -20,6 +20,6 @@ dir_starpu=$dir_current/src/starpu
 dir_openmp=$dir_current/src/openmp
 
 nbodies_initial_index=12
-nbodies_final_index=18
-experiments_starpu_parts=15
+nbodies_final_index=17
+experiments_starpu_parts=16
 experiments_omp_threads=16

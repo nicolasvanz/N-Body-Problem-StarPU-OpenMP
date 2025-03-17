@@ -31,9 +31,9 @@
 #define PARTS 1
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
-extern void bodyForce_cuda(void *buffers[], void *_args);
+// extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);
-extern void integratePositions_cuda(void *buffers[], void *_args);
+// extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "bodyforce"};
@@ -45,7 +45,7 @@ static struct starpu_codelet bodyForce_cl = {
     .cpu_funcs = {bodyForce_cpu},
 
 #ifdef STARPU_USE_CUDA
-    .cuda_funcs = {bodyForce_cuda},
+    // .cuda_funcs = {bodyForce_cuda},
 #endif
     .nbuffers = 2,
     .modes = {STARPU_R, STARPU_RW},
@@ -56,7 +56,7 @@ static struct starpu_codelet integratePositions_cl = {
     .cpu_funcs = {integratePositions_cpu},
 
 #ifdef STARPU_USE_CUDA
-    .cuda_funcs = {integratePositions_cuda},
+    // .cuda_funcs = {integratePositions_cuda},
 #endif
     .nbuffers = 2,
     .modes = {STARPU_RW, STARPU_R},
