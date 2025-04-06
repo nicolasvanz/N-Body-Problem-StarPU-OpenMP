@@ -3,6 +3,7 @@ services:
     build:
       dockerfile: Dockerfile.starpu
     command: bash
+    tty: true
     deploy:
       resources:
         reservations:
@@ -15,19 +16,19 @@ services:
       - ./results:/home/results
       - ./experiments.sh:/home/experiments.sh
       - ./const.sh:/home/const.sh
-  openmp:
-    build:
-      dockerfile: Dockerfile.openmp
-    command: bash
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    volumes:
-      - ./src:/home/src
-      - ./results:/home/results
-      - ./experiments.sh:/home/experiments.sh
-      - ./const.sh:/home/const.sh
+  # openmp:
+  #   build:
+  #     dockerfile: Dockerfile.openmp
+  #   command: bash
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   volumes:
+  #     - ./src:/home/src
+  #     - ./results:/home/results
+  #     - ./experiments.sh:/home/experiments.sh
+  #     - ./const.sh:/home/const.sh
