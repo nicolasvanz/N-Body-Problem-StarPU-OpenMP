@@ -1,13 +1,13 @@
 STARPU_VERSION=1.4
 
-CC = gcc
+CC = mpicc
 NVCC = nvcc
 
-CPPFLAGS += $(shell pkg-config --cflags starpu-$(STARPU_VERSION))
-LDLIBS += $(shell pkg-config --libs starpu-$(STARPU_VERSION))
+CPPFLAGS += $(shell pkg-config --cflags starpu-$(STARPU_VERSION) --cflags starpumpi-1.4)
+LDLIBS += $(shell pkg-config --libs starpu-$(STARPU_VERSION) --libs starpumpi-1.4)
 
 CFLAGS += -O3 -Wall -Wextra -lm -fopenmp
-NVCCFLAGS = $(shell pkg-config --cflags starpu-$(STARPU_VERSION)) -std=c++11
+NVCCFLAGS = $(shell pkg-config --cflags starpu-$(STARPU_VERSION) --cflags starpumpi-1.4) -std=c++11
 
 # to avoid having to use LD_LIBRARY_PATH
 LDLIBS += -fopenmp -lm -Wl,-rpath -Wl,$(shell pkg-config --variable=libdir starpu-$(STARPU_VERSION))
@@ -25,7 +25,7 @@ endif
 # endif
 
 %.o: %.cu
-	$(NVCC) $(NVCCFLAGS) $< -c -o $@
+	$(NVCC) -ccbin $(CC) $(NVCCFLAGS) $< -c -o $@
 
 all: $(PROGS)
 

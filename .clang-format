@@ -1,0 +1,14 @@
+BasedOnStyle: LLVM
+BreakBeforeBraces: Attach
+IndentWidth: 4
+ColumnLimit: 80
+AlignAfterOpenBracket: Align
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackParameters: false
+BinPackArguments: false
+PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyBreakAssignment: 2
+PenaltyBreakString: 1000 
+IndentWrappedFunctionNames: false
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerIndentWidth: 4

@@ -12,7 +12,8 @@ RUN sudo apt-get update && sudo apt-get install -y \
     wget \
     libpciaccess-dev \
     libxml2-dev \
-    libnuma-dev 
+    libnuma-dev \
+    openssh-server
 
 ENV HWLOC_VERSION=2.9.0
 
@@ -27,4 +28,24 @@ RUN sudo wget https://download.open-mpi.org/release/hwloc/v2.9/hwloc-${HWLOC_VER
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
+COPY ./src /home/src
+
 WORKDIR /home/src/starpu
+
+USER root
+
+RUN sudo make clean && sudo make
+
+RUN sudo mkdir -p /var/run/sshd
+# RUN sudo chmod 700 /etc/ssh
+RUN echo "Host *\n\tStrictHostKeyChecking no\n" | sudo tee -a /etc/ssh/ssh_config
+RUN ssh-keygen -A
+RUN ssh-keyscan starpu1 starpu2 | sudo tee -a /etc/ssh/ssh_known_hosts
+
+# ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+# ENV PATH=/usr/local/bin:$PATH
+
+# RUN sudo chmod 1777 /home/src/starpu
+
+# CMD ["tail", "-f", "/dev/null"]
+CMD ["sudo", "/usr/sbin/sshd", "-D"]

@@ -15,61 +15,70 @@
  */
 
 #include <starpu.h>
+#include <starpu_mpi.h>
 #include <stdio.h>
 
 #include "../include/body.h"
 
 void integratePositions_cpu(void *buffers[], void *_args) {
-  (void) _args;
-  /* length of the vector */
-  unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
+    (void)_args;
+    int rank;
+    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
+    printf("running integrate positions cpu on rank %d\n", rank);
 
-  /* local copy of the vector pointer */
-  Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
-  Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+    /* length of the vector */
+    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
 
-  unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
+    /* local copy of the vector pointer */
+    Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
-  for (unsigned i = 0; i < nVel; i++) {
-    p[i + offset].x += v[i].vx * dt;
-    p[i + offset].y += v[i].vy * dt;
-    p[i + offset].z += v[i].vz * dt;
-  }
+    // unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
+
+    for (unsigned i = 0; i < nVel; i++) {
+        p[i].x += v[i].vx * dt;
+        p[i].y += v[i].vy * dt;
+        p[i].z += v[i].vz * dt;
+    }
 }
 
 void bodyForce_cpu(void *buffers[], void *_args) {
-  (void) _args;
-  /* length of the vector */
-  unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);
-  unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
+    (void)_args;
+    int rank;
+    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
+    printf("running body force cpu on rank %d\n", rank);
 
-  /* local copy of the vector pointer */
-  Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
-  Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+    /* length of the vector */
+    unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);
+    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
 
-  /* extract the value arguments */
-  unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
+    /* local copy of the vector pointer */
+    Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
-  for (unsigned i = 0; i < nVel; i++) {
-    float Fx = 0.0f;
-    float Fy = 0.0f;
-    float Fz = 0.0f;
+    /* extract the value arguments */
+    unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
 
-    for (unsigned j = 0; j < nPos; j++) {
-      float dx = p[j].x - p[i + offset].x;
-      float dy = p[j].y - p[i + offset].y;
-      float dz = p[j].z - p[i + offset].z;
-      float distSqr = dx * dx + dy * dy + dz * dz + SOFTENING;
-      float invDist = my_rsqrtf(distSqr);
-      float invDist3 = invDist * invDist * invDist;
+    for (unsigned i = 0; i < nVel; i++) {
+        float Fx = 0.0f;
+        float Fy = 0.0f;
+        float Fz = 0.0f;
 
-      Fx += dx * invDist3;
-      Fy += dy * invDist3;
-      Fz += dz * invDist3;
+        for (unsigned j = 0; j < nPos; j++) {
+            float dx = p[j].x - p[i + offset].x;
+            float dy = p[j].y - p[i + offset].y;
+            float dz = p[j].z - p[i + offset].z;
+            float distSqr = dx * dx + dy * dy + dz * dz + SOFTENING;
+            float invDist = my_rsqrtf(distSqr);
+            float invDist3 = invDist * invDist * invDist;
+
+            Fx += dx * invDist3;
+            Fy += dy * invDist3;
+            Fz += dz * invDist3;
+        }
+
+        v[i].vx += dt * Fx;
+        v[i].vy += dt * Fy;
+        v[i].vz += dt * Fz;
     }
-
-    v[i].vx += dt * Fx;
-    v[i].vy += dt * Fy;
-    v[i].vz += dt * Fz;
-  }
 }
