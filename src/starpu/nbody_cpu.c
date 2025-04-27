@@ -33,8 +33,6 @@ void integratePositions_cpu(void *buffers[], void *_args) {
     Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
     Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
-    // unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
-
     for (unsigned i = 0; i < nVel; i++) {
         p[i].x += v[i].vx * dt;
         p[i].y += v[i].vy * dt;

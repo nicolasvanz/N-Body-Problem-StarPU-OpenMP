@@ -1,8 +1,8 @@
 services:
-  starpu1:
+  starpu2:
     build:
       dockerfile: Dockerfile.starpu
-    # command: bash
+    command: bash
     deploy:
       resources:
         reservations:
@@ -16,10 +16,10 @@ services:
       - ./experiments.sh:/home/experiments.sh
       - ./const.sh:/home/const.sh
       - ./hostfile:/home/hostfile
-  starpu2:
+  starpu1:
     build:
       dockerfile: Dockerfile.starpu
-    # command: sudo mpirun --allow-run-as-root --hostfile /home/hostfile -np 2 -x StrictHostKeyChecking=no ./nbody
+    command: sudo mpirun --allow-run-as-root --hostfile /home/hostfile -np 1 ./nbody
     deploy:
       resources:
         reservations:

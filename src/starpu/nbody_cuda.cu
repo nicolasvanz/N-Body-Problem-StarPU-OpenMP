@@ -70,7 +70,6 @@ extern "C" void bodyForce_cuda(void *buffers[], void *_args) {
     Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
     Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
-    /* extract the value arguments */
     unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
 
     unsigned threads_per_block = 64;
@@ -94,9 +93,6 @@ extern "C" void integratePositions_cuda(void *buffers[], void *_args) {
     /* local copy of the vector pointer */
     Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
     Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
-
-    /* extract the value arguments */
-    // unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
 
     unsigned threads_per_block = 64;
     unsigned nblocks = (nVel + threads_per_block - 1) / threads_per_block;

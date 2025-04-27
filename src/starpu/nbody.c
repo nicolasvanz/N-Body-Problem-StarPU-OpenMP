@@ -28,8 +28,7 @@
 #include "../include/body.h"
 #include "../include/files.h"
 
-// #define DEBUG
-// #define PARTS 1
+#define DEBUG
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void bodyForce_cuda(void *buffers[], void *_args);
@@ -81,10 +80,14 @@ int main(int argc, char **argv) {
 #endif
 
 #ifdef DEBUG
-    const char *initialized_pos = "../debug/initialized_pos_12";
-    const char *initialized_vel = "../debug/initialized_vel_12";
-    const char *computed_pos = "../debug/computed_pos_12";
-    const char *computed_vel = "../debug/computed_vel_12";
+    const char *initialized_pos = "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/"
+                                  "src/debug/initialized_pos_12";
+    const char *initialized_vel = "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/"
+                                  "src/debug/initialized_vel_12";
+    const char *computed_pos =
+        "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/debug/computed_pos_12";
+    const char *computed_vel =
+        "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/debug/computed_vel_12";
 #endif
 
     setbuf(stdout, NULL);
@@ -96,12 +99,6 @@ int main(int argc, char **argv) {
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
     printf("rank: %d, size: %d\n", rank, size);
-
-    // if (size < 2) {
-    //   printf("Error: Need at least 2 processes\n");
-    //   starpu_mpi_shutdown();
-    //   return -1;
-    // }
 
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
@@ -188,25 +185,33 @@ int main(int argc, char **argv) {
     }
     starpu_task_wait_for_all();
 
-    starpu_data_unpartition_submit(vel_handle, size, vel_handles, 0);
+    starpu_data_unpartition_submit(vel_handle, size, vel_handles, -1);
+    starpu_data_unpartition_submit(pos_handle, size, pos_handles, -1);
     starpu_data_partition_clean(pos_handle, size, pos_handles);
     starpu_data_partition_clean(vel_handle, size, vel_handles);
+
+    if (rank == 0) {
+        double timing = starpu_timing_now() - start; // in microsseconds
+        printf("%lf\n", timing);
+        starpu_data_acquire(pos_handle, STARPU_R);
+        starpu_data_acquire(vel_handle, STARPU_R);
+        pos = starpu_data_get_local_ptr(pos_handle);
+        vel = starpu_data_get_local_ptr(vel_handle);
+#ifdef DEBUG
+        write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
+        write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
+#endif
+        starpu_data_release(pos_handle);
+        starpu_data_release(vel_handle);
+    }
 
     starpu_data_unregister(pos_handle);
     starpu_data_unregister(vel_handle);
 
     if (rank == 0) {
-        double timing = starpu_timing_now() - start; // in microsseconds
-        printf("%lf\n", timing);
+        starpu_free_noflag(pos, sizeof(Pos) * nBodies);
+        starpu_free_noflag(vel, sizeof(Vel) * nBodies);
     }
-
-#ifdef DEBUG
-    write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
-    write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
-#endif
-
-    starpu_free_noflag(pos, sizeof(Pos) * nBodies);
-    starpu_free_noflag(vel, sizeof(Vel) * nBodies);
     free(pos_handles);
     free(vel_handles);
 
