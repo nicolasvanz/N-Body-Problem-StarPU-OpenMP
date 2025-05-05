@@ -15,7 +15,6 @@
  */
 
 #include <starpu.h>
-#include <starpu_mpi.h>
 
 #include "../include/body.h"
 
@@ -58,10 +57,6 @@ static __global__ void integratePositions(Pos *p, Vel *v, int n) {
 }
 
 extern "C" void bodyForce_cuda(void *buffers[], void *_args) {
-    int rank;
-    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
-    printf("running body force gpu on rank %d\n", rank);
-
     /* length of the vector */
     unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);
     unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
@@ -84,9 +79,6 @@ extern "C" void bodyForce_cuda(void *buffers[], void *_args) {
 }
 
 extern "C" void integratePositions_cuda(void *buffers[], void *_args) {
-    int rank;
-    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
-    printf("running integrate positions gpu on rank %d\n", rank);
     /* length of the vector */
     unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
 

@@ -23,17 +23,16 @@
  *  3- how a kernel can manipulate the data (buffers[0].vector.ptr)
  */
 #include <starpu.h>
-#include <starpu_mpi.h>
 
 #include "../include/body.h"
 #include "../include/files.h"
 
-#define DEBUG
+// #define DEBUG
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
-extern void bodyForce_cuda(void *buffers[], void *_args);
+// extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);
-extern void integratePositions_cuda(void *buffers[], void *_args);
+// extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "bodyforce"};
@@ -44,9 +43,9 @@ static struct starpu_perfmodel integratepositions_perfmodel = {
 static struct starpu_codelet bodyForce_cl = {
     .cpu_funcs = {bodyForce_cpu},
 
-#ifdef STARPU_USE_CUDA
-    .cuda_funcs = {bodyForce_cuda},
-#endif
+// #ifdef STARPU_USE_CUDA
+//     .cuda_funcs = {bodyForce_cuda},
+// #endif
     .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
@@ -57,9 +56,9 @@ static struct starpu_codelet bodyForce_cl = {
 static struct starpu_codelet integratePositions_cl = {
     .cpu_funcs = {integratePositions_cpu},
 
-#ifdef STARPU_USE_CUDA
-    .cuda_funcs = {integratePositions_cuda},
-#endif
+// #ifdef STARPU_USE_CUDA
+//     .cuda_funcs = {integratePositions_cuda},
+// #endif
     .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
@@ -72,7 +71,7 @@ int main(int argc, char **argv) {
     int nBodies = 2 << 12;
     Pos *pos;
     Vel *vel;
-    starpu_mpi_tag_t tag = 0;
+    size=1;
 
 #ifndef DEBUG
     if (argc > 1)
@@ -94,59 +93,41 @@ int main(int argc, char **argv) {
         "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/debug/computed_vel_12";
 #endif
 
-    setbuf(stdout, NULL);
     struct starpu_conf conf;
     starpu_conf_init(&conf);
     conf.sched_policy_name = "dmda";
-    conf.reserve_ncpus = 1;
 
-    starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
-    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
-    starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
-    printf("rank: %d, size: %d\n", rank, size);
+    starpu_init(&conf);
 
     int ncpu_workers = starpu_worker_get_count_by_type(STARPU_CPU_WORKER);
-    int ncuda_workers = starpu_worker_get_count_by_type(STARPU_CUDA_WORKER);
-    printf("cuda workers: %d\n", ncuda_workers);
-    printf("cpu workers: %d\n", ncpu_workers);
     int *cpu_workers = (int *)malloc(sizeof(int) * ncpu_workers);
-    int *cuda_workers =
-        ncuda_workers > 0 ? (int *)malloc(sizeof(int) * ncuda_workers) : NULL;
     starpu_worker_get_ids_by_type(STARPU_CPU_WORKER, cpu_workers, ncpu_workers);
-    if (cuda_workers)
-        starpu_worker_get_ids_by_type(
-            STARPU_CUDA_WORKER, cuda_workers, ncuda_workers);
     int cpu_combined_worker_id =
         starpu_combined_worker_assign_workerid(ncpu_workers, cpu_workers);
 
-    printf("combined worker id: %d\n", cpu_combined_worker_id);
-    printf("worker count: %d\n", starpu_worker_get_count());
-
-    if (rank == 0) {
-        starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
-        starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
+    starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
+    starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
 
 #ifdef DEBUG
-        read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
-        read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
+    read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
+    read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
 #else
-        for (int i = 0; i < nBodies; i++) {
-            pos[i].x = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-            pos[i].y = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-            pos[i].z = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-        }
-        for (int i = 0; i < nBodies; i++) {
-            vel[i].vx = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-            vel[i].vy = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-            vel[i].vz = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-        }
-#endif
+    for (int i = 0; i < nBodies; i++) {
+        pos[i].x = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+        pos[i].y = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+        pos[i].z = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
     }
+    for (int i = 0; i < nBodies; i++) {
+        vel[i].vx = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+        vel[i].vy = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+        vel[i].vz = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
+    }
+#endif
 
     // vectors are allocated in rank 0
-    int memory_region = (rank == 0) ? STARPU_MAIN_RAM : -1;
-    uintptr_t pos_ptr = (rank == 0) ? (uintptr_t)pos : 0;
-    uintptr_t vel_ptr = (rank == 0) ? (uintptr_t)vel : 0;
+    int memory_region = STARPU_MAIN_RAM;
+    uintptr_t pos_ptr = (uintptr_t)pos;
+    uintptr_t vel_ptr = (uintptr_t)vel;
 
     /* starpu data handles */
     starpu_data_handle_t pos_handle;
@@ -161,53 +142,37 @@ int main(int argc, char **argv) {
     starpu_data_handle_t *vel_handles =
         (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * size);
 
-    // tagging mpi data
-    starpu_mpi_data_register(pos_handle, tag++, 0);
-    starpu_mpi_data_register(vel_handle, tag++, 0);
-
     // async partitioning vectors
     struct starpu_data_filter filter = {
         .filter_func = starpu_vector_filter_block, .nchildren = size};
     starpu_data_partition_plan(pos_handle, &filter, pos_handles);
     starpu_data_partition_plan(vel_handle, &filter, vel_handles);
-    for (int i = 0; i < size; i++) {
-        starpu_mpi_data_register(vel_handles[i], tag++, 0);
-        starpu_mpi_data_register(pos_handles[i], tag++, 0);
-    }
 
     const int nIters = 10;
     double start = starpu_timing_now();
 
     for (int i = 0; i < nIters; i++) {
         for (int j = 0; j < size; j++) {
-            ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
-                                         &bodyForce_cl,
-                                         STARPU_R,
-                                         pos_handle,
-                                         STARPU_RW,
-                                         vel_handles[j],
-                                         STARPU_EXECUTE_ON_NODE,
-                                         j,
-                                        //  STARPU_EXECUTE_ON_WORKER,
-                                        //  cpu_combined_worker_id,
-                                         0);
+            ret = starpu_task_insert(&bodyForce_cl,
+                                     STARPU_R,
+                                     pos_handle,
+                                     STARPU_RW,
+                                     vel_handles[j],
+                                     STARPU_EXECUTE_ON_WORKER,
+                                     cpu_combined_worker_id,
+                                     0);
         }
 
-        starpu_task_wait_for_all();
         for (int j = 0; j < size; j++) {
-            ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
-                                         &integratePositions_cl,
-                                         STARPU_RW,
-                                         pos_handles[j],
-                                         STARPU_R,
-                                         vel_handles[j],
-                                         STARPU_EXECUTE_ON_NODE,
-                                         j,
-                                        //  STARPU_EXECUTE_ON_WORKER,
-                                        //  cpu_combined_worker_id,
-                                         0);
+            ret = starpu_task_insert(&integratePositions_cl,
+                                     STARPU_RW,
+                                     pos_handles[j],
+                                     STARPU_R,
+                                     vel_handles[j],
+                                     STARPU_EXECUTE_ON_WORKER,
+                                     cpu_combined_worker_id,
+                                     0);
         }
-        starpu_task_wait_for_all();
     }
     starpu_task_wait_for_all();
 
@@ -234,12 +199,10 @@ int main(int argc, char **argv) {
     starpu_data_unregister(pos_handle);
     starpu_data_unregister(vel_handle);
 
-    if (rank == 0) {
-        starpu_free_noflag(pos, sizeof(Pos) * nBodies);
-        starpu_free_noflag(vel, sizeof(Vel) * nBodies);
-    }
+    starpu_free_noflag(pos, sizeof(Pos) * nBodies);
+    starpu_free_noflag(vel, sizeof(Vel) * nBodies);
     free(pos_handles);
     free(vel_handles);
 
-    starpu_mpi_shutdown();
+    starpu_shutdown();
 }

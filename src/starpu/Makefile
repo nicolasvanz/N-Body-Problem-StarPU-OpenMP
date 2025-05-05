@@ -20,10 +20,10 @@ include ./starpu.mk
 
 nbody: nbody.o nbody_cpu.o
 
-ifeq ($(USE_CUDA),1)
-nbody: nbody_cuda.o
-nbody: LDLIBS+=-L$(CUDA_PATH)/lib64 -lcudart -lstdc++
-endif
+# ifeq ($(USE_CUDA),1)
+# nbody: nbody_cuda.o
+# nbody: LDLIBS+=-L$(CUDA_PATH)/lib64 -lcudart -lstdc++
+# endif
 
 compare:
 	@DIFF_OUTPUT=$$( \

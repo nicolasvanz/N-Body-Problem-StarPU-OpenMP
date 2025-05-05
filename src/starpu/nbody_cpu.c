@@ -15,17 +15,12 @@
  */
 
 #include <starpu.h>
-#include <starpu_mpi.h>
 #include <stdio.h>
 
 #include "../include/body.h"
 
 void integratePositions_cpu(void *buffers[], void *_args) {
     (void)_args;
-    int rank;
-    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
-    printf("running integrate positions cpu on rank %d\n", rank);
-    printf("running task with %d cpus\n", starpu_combined_worker_get_size());
 
     /* length of the vector */
     unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
@@ -44,10 +39,6 @@ void integratePositions_cpu(void *buffers[], void *_args) {
 
 void bodyForce_cpu(void *buffers[], void *_args) {
     (void)_args;
-    int rank;
-    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
-    printf("running body force cpu on rank %d\n", rank);
-    printf("running task with %d cpus\n", starpu_combined_worker_get_size());
 
     /* length of the vector */
     unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);

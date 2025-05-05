@@ -19,9 +19,7 @@ function run_replications
 
   (cd $dir_results && mkdir -p $prefix)
   eval "$command" #calibrate
-  eval "$command" #calibrate
-  eval "$command" #calibrate
-  for i in {1..7}
+  for i in {1..3}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
@@ -40,17 +38,13 @@ function starpu_gpu
 
 function starpu_cpu
 {
-  starpu_parts_macro="#define PARTS"
-  starpu_parts_default="$starpu_parts_macro 1"
-  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro $experiments_starpu_parts"
   (cd $dir_starpu && make clean && make)
-  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
+  for n in 13 14
   do
     prefix="starpu_cpu-$n"
-    run="STARPU_NCUDA=0 $dir_starpu/nbody $n"
+    run="$dir_starpu/nbody $n"
     run_replications "$run" "$prefix"
   done
-  replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
 }
 
 function starpu_cpu_gpu
@@ -113,21 +107,4 @@ function openmp_cpu_gpu
   replace "$dir_openmp" "$openmp_bodyforce_use_cpu_macro 0" "$openmp_bodyforce_use_cpu_default"
 }
 
-if [ $# -lt 1 ]; then
-    echo "no arguments"
-    exit 1
-fi
-
-if [ "$1" == "starpu" ]; then
-    echo "starpu experiments..."
-    starpu_cpu
-    starpu_gpu
-    starpu_cpu_gpu
-elif [ "$1" == "openmp" ]; then
-    echo "openmp experiments..."
-    openmp_cpu
-    openmp_gpu
-    openmp_cpu_gpu
-else
-    echo "Unknown command: $1"
-fi
+starpu_cpu
