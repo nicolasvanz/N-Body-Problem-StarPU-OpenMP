@@ -47,6 +47,8 @@ static struct starpu_codelet bodyForce_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {bodyForce_cuda},
 #endif
+    .type = STARPU_FORKJOIN,
+    .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_R, STARPU_RW},
     .model = &bodyforce_perfmodel,
@@ -58,6 +60,8 @@ static struct starpu_codelet integratePositions_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {integratePositions_cuda},
 #endif
+    .type = STARPU_FORKJOIN,
+    .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_RW, STARPU_R},
     .model = &integratepositions_perfmodel,
@@ -94,11 +98,29 @@ int main(int argc, char **argv) {
     struct starpu_conf conf;
     starpu_conf_init(&conf);
     conf.sched_policy_name = "dmda";
+    conf.reserve_ncpus = 1;
 
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
     printf("rank: %d, size: %d\n", rank, size);
+
+    int ncpu_workers = starpu_worker_get_count_by_type(STARPU_CPU_WORKER);
+    int ncuda_workers = starpu_worker_get_count_by_type(STARPU_CUDA_WORKER);
+    printf("cuda workers: %d\n", ncuda_workers);
+    printf("cpu workers: %d\n", ncpu_workers);
+    int *cpu_workers = (int *)malloc(sizeof(int) * ncpu_workers);
+    int *cuda_workers =
+        ncuda_workers > 0 ? (int *)malloc(sizeof(int) * ncuda_workers) : NULL;
+    starpu_worker_get_ids_by_type(STARPU_CPU_WORKER, cpu_workers, ncpu_workers);
+    if (cuda_workers)
+        starpu_worker_get_ids_by_type(
+            STARPU_CUDA_WORKER, cuda_workers, ncuda_workers);
+    int cpu_combined_worker_id =
+        starpu_combined_worker_assign_workerid(ncpu_workers, cpu_workers);
+
+    printf("combined worker id: %d\n", cpu_combined_worker_id);
+    printf("worker count: %d\n", starpu_worker_get_count());
 
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
@@ -166,6 +188,8 @@ int main(int argc, char **argv) {
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
                                          j,
+                                        //  STARPU_EXECUTE_ON_WORKER,
+                                        //  cpu_combined_worker_id,
                                          0);
         }
 
@@ -179,6 +203,8 @@ int main(int argc, char **argv) {
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
                                          j,
+                                        //  STARPU_EXECUTE_ON_WORKER,
+                                        //  cpu_combined_worker_id,
                                          0);
         }
         starpu_task_wait_for_all();

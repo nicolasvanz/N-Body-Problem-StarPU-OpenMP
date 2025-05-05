@@ -48,4 +48,5 @@ RUN ssh-keyscan starpu1 starpu2 | sudo tee -a /etc/ssh/ssh_known_hosts
 # RUN sudo chmod 1777 /home/src/starpu
 
 # CMD ["tail", "-f", "/dev/null"]
+USER starpu
 CMD ["sudo", "/usr/sbin/sshd", "-D"]
