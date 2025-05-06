@@ -28,7 +28,7 @@
 #include "../include/body.h"
 #include "../include/files.h"
 
-#define DEBUG
+// #define DEBUG
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void bodyForce_cuda(void *buffers[], void *_args);
@@ -42,7 +42,7 @@ static struct starpu_perfmodel integratepositions_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "integratepositions"};
 
 static struct starpu_codelet bodyForce_cl = {
-    .cpu_funcs = {bodyForce_cpu},
+    // .cpu_funcs = {bodyForce_cpu},
 
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {bodyForce_cuda},
@@ -55,7 +55,7 @@ static struct starpu_codelet bodyForce_cl = {
 };
 
 static struct starpu_codelet integratePositions_cl = {
-    .cpu_funcs = {integratePositions_cpu},
+    // .cpu_funcs = {integratePositions_cpu},
 
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {integratePositions_cuda},
@@ -103,12 +103,9 @@ int main(int argc, char **argv) {
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
-    printf("rank: %d, size: %d\n", rank, size);
 
     int ncpu_workers = starpu_worker_get_count_by_type(STARPU_CPU_WORKER);
     int ncuda_workers = starpu_worker_get_count_by_type(STARPU_CUDA_WORKER);
-    printf("cuda workers: %d\n", ncuda_workers);
-    printf("cpu workers: %d\n", ncpu_workers);
     int *cpu_workers = (int *)malloc(sizeof(int) * ncpu_workers);
     int *cuda_workers =
         ncuda_workers > 0 ? (int *)malloc(sizeof(int) * ncuda_workers) : NULL;
@@ -118,9 +115,6 @@ int main(int argc, char **argv) {
             STARPU_CUDA_WORKER, cuda_workers, ncuda_workers);
     int cpu_combined_worker_id =
         starpu_combined_worker_assign_workerid(ncpu_workers, cpu_workers);
-
-    printf("combined worker id: %d\n", cpu_combined_worker_id);
-    printf("worker count: %d\n", starpu_worker_get_count());
 
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
@@ -193,7 +187,6 @@ int main(int argc, char **argv) {
                                          0);
         }
 
-        starpu_task_wait_for_all();
         for (int j = 0; j < size; j++) {
             ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
                                          &integratePositions_cl,
@@ -207,7 +200,6 @@ int main(int argc, char **argv) {
                                         //  cpu_combined_worker_id,
                                          0);
         }
-        starpu_task_wait_for_all();
     }
     starpu_task_wait_for_all();
 
