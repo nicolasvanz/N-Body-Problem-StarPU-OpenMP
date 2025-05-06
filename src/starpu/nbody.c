@@ -28,12 +28,12 @@
 #include "../include/body.h"
 #include "../include/files.h"
 
-#define DEBUG
+// #define DEBUG
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
-extern void bodyForce_cuda(void *buffers[], void *_args);
+// extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);
-extern void integratePositions_cuda(void *buffers[], void *_args);
+// extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "bodyforce"};
@@ -44,9 +44,9 @@ static struct starpu_perfmodel integratepositions_perfmodel = {
 static struct starpu_codelet bodyForce_cl = {
     .cpu_funcs = {bodyForce_cpu},
 
-#ifdef STARPU_USE_CUDA
-    .cuda_funcs = {bodyForce_cuda},
-#endif
+    // #ifdef STARPU_USE_CUDA
+    //     .cuda_funcs = {bodyForce_cuda},
+    // #endif
     .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
@@ -57,9 +57,9 @@ static struct starpu_codelet bodyForce_cl = {
 static struct starpu_codelet integratePositions_cl = {
     .cpu_funcs = {integratePositions_cpu},
 
-#ifdef STARPU_USE_CUDA
-    .cuda_funcs = {integratePositions_cuda},
-#endif
+    // #ifdef STARPU_USE_CUDA
+    //     .cuda_funcs = {integratePositions_cuda},
+    // #endif
     .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
@@ -177,6 +177,7 @@ int main(int argc, char **argv) {
 
     const int nIters = 10;
     double start = starpu_timing_now();
+    unsigned long long where = 1ULL << (63 - cpu_combined_worker_id);
 
     for (int i = 0; i < nIters; i++) {
         for (int j = 0; j < size; j++) {
@@ -188,12 +189,11 @@ int main(int argc, char **argv) {
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
                                          j,
-                                        //  STARPU_EXECUTE_ON_WORKER,
-                                        //  cpu_combined_worker_id,
+                                         STARPU_EXECUTE_WHERE,
+                                         where,
                                          0);
         }
 
-        starpu_task_wait_for_all();
         for (int j = 0; j < size; j++) {
             ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
                                          &integratePositions_cl,
@@ -203,8 +203,8 @@ int main(int argc, char **argv) {
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
                                          j,
-                                        //  STARPU_EXECUTE_ON_WORKER,
-                                        //  cpu_combined_worker_id,
+                                         //  STARPU_EXECUTE_ON_WORKER,
+                                         //  cpu_combined_worker_id,
                                          0);
         }
         starpu_task_wait_for_all();
@@ -217,12 +217,12 @@ int main(int argc, char **argv) {
     starpu_data_partition_clean(vel_handle, size, vel_handles);
 
     if (rank == 0) {
-        double timing = starpu_timing_now() - start; // in microsseconds
-        printf("%lf\n", timing);
         starpu_data_acquire(pos_handle, STARPU_R);
         starpu_data_acquire(vel_handle, STARPU_R);
         pos = starpu_data_get_local_ptr(pos_handle);
         vel = starpu_data_get_local_ptr(vel_handle);
+        double timing = starpu_timing_now() - start; // in microsseconds
+        printf("%lf\n", timing);
 #ifdef DEBUG
         write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
         write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
