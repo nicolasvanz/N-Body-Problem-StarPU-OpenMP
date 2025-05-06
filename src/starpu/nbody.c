@@ -30,9 +30,9 @@
 // #define DEBUG
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
-// extern void bodyForce_cuda(void *buffers[], void *_args);
+extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);
-// extern void integratePositions_cuda(void *buffers[], void *_args);
+extern void integratePositions_cuda(void *buffers[], void *_args);
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "bodyforce"};
@@ -43,9 +43,9 @@ static struct starpu_perfmodel integratepositions_perfmodel = {
 static struct starpu_codelet bodyForce_cl = {
     .cpu_funcs = {bodyForce_cpu},
 
-// #ifdef STARPU_USE_CUDA
-//     .cuda_funcs = {bodyForce_cuda},
-// #endif
+#ifdef STARPU_USE_CUDA
+    .cuda_funcs = {bodyForce_cuda},
+#endif
     .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
@@ -56,9 +56,9 @@ static struct starpu_codelet bodyForce_cl = {
 static struct starpu_codelet integratePositions_cl = {
     .cpu_funcs = {integratePositions_cpu},
 
-// #ifdef STARPU_USE_CUDA
-//     .cuda_funcs = {integratePositions_cuda},
-// #endif
+#ifdef STARPU_USE_CUDA
+    .cuda_funcs = {integratePositions_cuda},
+#endif
     .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     int nBodies = 2 << 12;
     Pos *pos;
     Vel *vel;
-    size=1;
+    size = 1;
 
 #ifndef DEBUG
     if (argc > 1)
@@ -100,10 +100,17 @@ int main(int argc, char **argv) {
     starpu_init(&conf);
 
     int ncpu_workers = starpu_worker_get_count_by_type(STARPU_CPU_WORKER);
+    int ncuda_workers = starpu_worker_get_count_by_type(STARPU_CUDA_WORKER);
+    int *cuda_workers =
+        ncuda_workers > 0 ? (int *)malloc(sizeof(int) * ncuda_workers) : NULL;
     int *cpu_workers = (int *)malloc(sizeof(int) * ncpu_workers);
     starpu_worker_get_ids_by_type(STARPU_CPU_WORKER, cpu_workers, ncpu_workers);
+    if (cuda_workers)
+        starpu_worker_get_ids_by_type(
+            STARPU_CUDA_WORKER, cuda_workers, ncuda_workers);
     int cpu_combined_worker_id =
         starpu_combined_worker_assign_workerid(ncpu_workers, cpu_workers);
+    int gpu_worker_id = cuda_workers[0];
 
     starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
     starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
@@ -159,7 +166,7 @@ int main(int argc, char **argv) {
                                      STARPU_RW,
                                      vel_handles[j],
                                      STARPU_EXECUTE_ON_WORKER,
-                                     cpu_combined_worker_id,
+                                     gpu_worker_id,
                                      0);
         }
 
@@ -170,7 +177,7 @@ int main(int argc, char **argv) {
                                      STARPU_R,
                                      vel_handles[j],
                                      STARPU_EXECUTE_ON_WORKER,
-                                     cpu_combined_worker_id,
+                                     gpu_worker_id,
                                      0);
         }
     }
