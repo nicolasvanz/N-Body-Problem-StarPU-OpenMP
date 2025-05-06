@@ -50,7 +50,7 @@ function starpu_cpu
 function starpu_cpu_gpu
 {
   (cd $dir_starpu && make clean && make)
-  for n in 13 14
+  for n in 18 19
   do
     prefix="starpu_cpu_gpu-$n"
     run="$dir_starpu/nbody $n"
