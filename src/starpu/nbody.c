@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
                                      STARPU_R,
                                      vel_handles[j],
                                      STARPU_EXECUTE_ON_WORKER,
-                                     gpu_worker_id,
+                                     cpu_combined_worker_id,
                                      0);
         }
     }
