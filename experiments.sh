@@ -19,7 +19,7 @@ function run_replications
 
   (cd $dir_results && mkdir -p $prefix)
   eval "$command" #calibrate
-  for i in {1..3}
+  for i in {1..1}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
@@ -39,9 +39,9 @@ function starpu_gpu
 function starpu_cpu
 {
   (cd $dir_starpu && make clean && make)
-  for n in 13 14
+  for n in 18 19
   do
-    prefix="starpu_cpu-$n"
+    prefix="c5n.starpu_cpu-$n"
     run="$dir_starpu/nbody $n"
     run_replications "$run" "$prefix"
   done
