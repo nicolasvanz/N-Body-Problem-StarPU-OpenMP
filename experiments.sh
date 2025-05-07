@@ -31,8 +31,10 @@ function starpu_gpu
   for n in 18 19
   do
     prefix="starpu_gpu-$n"
-    run="mpirun --hostfile hostfile -map-by slot:PE=16 $dir_starpu/nbody $n"
+    run="mpirun --hostfile hostfile -map-by slot:PE=8 $dir_starpu/nbody $n"
     scp src/starpu/nbody ec2-user@10.0.0.11:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.12:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.13:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
     run_replications "$run" "$prefix"
   done
 }
