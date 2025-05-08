@@ -31,14 +31,22 @@ function starpu_gpu
   for n in 18 19
   do
     prefix="starpu_gpu-$n"
-    run="mpirun --hostfile hostfile -map-by slot:PE=8 $dir_starpu/nbody $n"
-    scp src/starpu/nbody ec2-user@10.0.0.11:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.12:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    run="mpirun --hostfile hostfile -map-by slot:PE=4 $dir_starpu/nbody $n"
+    scp src/starpu/nbody ec2-user@10.0.0.19:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.17:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.115:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
     scp src/starpu/nbody ec2-user@10.0.0.13:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.14:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
     scp src/starpu/nbody ec2-user@10.0.0.15:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
     scp src/starpu/nbody ec2-user@10.0.0.16:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.17:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.11:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.14:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.113:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.114:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.18:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.112:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.110:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.111:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    scp src/starpu/nbody ec2-user@10.0.0.12:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
     run_replications "$run" "$prefix"
   done
 }
