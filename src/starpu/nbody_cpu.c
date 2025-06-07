@@ -22,9 +22,6 @@
 
 void integratePositions_cpu(void *buffers[], void *_args) {
     (void)_args;
-    int rank;
-    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
-    printf("running integrate positions cpu on rank %d\n", rank);
 
     /* length of the vector */
     unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
@@ -33,7 +30,6 @@ void integratePositions_cpu(void *buffers[], void *_args) {
     Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
     Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
 
-#pragma omp parallel for num_threads(starpu_combined_worker_get_size())
     for (unsigned i = 0; i < nVel; i++) {
         p[i].x += v[i].vx * dt;
         p[i].y += v[i].vy * dt;
@@ -43,9 +39,6 @@ void integratePositions_cpu(void *buffers[], void *_args) {
 
 void bodyForce_cpu(void *buffers[], void *_args) {
     (void)_args;
-    int rank;
-    starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
-    printf("running body force cpu on rank %d\n", rank);
 
     /* length of the vector */
     unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);
@@ -58,7 +51,6 @@ void bodyForce_cpu(void *buffers[], void *_args) {
     /* extract the value arguments */
     unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
 
-#pragma omp parallel for num_threads(starpu_combined_worker_get_size())
     for (unsigned i = 0; i < nVel; i++) {
         float Fx = 0.0f;
         float Fy = 0.0f;

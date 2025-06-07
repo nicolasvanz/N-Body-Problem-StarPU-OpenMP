@@ -32,53 +32,27 @@ function starpu_gpu
   do
     prefix="starpu_gpu-$n"
     run="mpirun --hostfile hostfile -map-by slot:PE=4 $dir_starpu/nbody $n"
-    scp src/starpu/nbody ec2-user@10.0.0.19:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.17:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.115:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.13:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.15:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.16:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.11:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.14:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.113:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.114:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.18:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.112:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.110:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.111:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
-    scp src/starpu/nbody ec2-user@10.0.0.12:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    for ip in $(awk '{print $1}' hostfile); do
+        echo "Copying to $ip..."
+        scp src/starpu/nbody ec2-user@$ip:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    done
     run_replications "$run" "$prefix"
   done
-}
-
-function starpu_cpu
-{
-  starpu_parts_macro="#define PARTS"
-  starpu_parts_default="$starpu_parts_macro 1"
-  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro $experiments_starpu_parts"
-  (cd $dir_starpu && make clean && make)
-  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
-  do
-    prefix="starpu_cpu-$n"
-    run="STARPU_NCUDA=0 $dir_starpu/nbody $n"
-    run_replications "$run" "$prefix"
-  done
-  replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
 }
 
 function starpu_cpu_gpu
 {
-  starpu_parts_macro="#define PARTS"
-  starpu_parts_default="$starpu_parts_macro 1"
-  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro $experiments_starpu_parts"
   (cd $dir_starpu && make clean && make)
-  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
+  for n in 18 19
   do
     prefix="starpu_cpu_gpu-$n"
-    run="$dir_starpu/nbody $n"
+    run="mpirun --hostfile hostfile -map-by slot:PE=4 $dir_starpu/nbody $n"
+    for ip in $(awk '{print $1}' hostfile); do
+        echo "Copying to $ip..."
+        scp src/starpu/nbody ec2-user@$ip:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
+    done
     run_replications "$run" "$prefix"
   done
-  replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
 }
 
-starpu_gpu
+starpu_cpu_gpu

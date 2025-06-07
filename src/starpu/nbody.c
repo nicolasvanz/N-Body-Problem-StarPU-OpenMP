@@ -47,7 +47,6 @@ static struct starpu_codelet bodyForce_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {bodyForce_cuda},
 #endif
-    .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_R, STARPU_RW},
@@ -60,7 +59,6 @@ static struct starpu_codelet integratePositions_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {integratePositions_cuda},
 #endif
-    .type = STARPU_FORKJOIN,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_RW, STARPU_R},
@@ -105,9 +103,8 @@ int main(int argc, char **argv) {
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
     
-    int ncpu_workers = starpu_worker_get_count_by_type(STARPU_CPU_WORKER);
-    printf("cpu workers: %d\n", ncpu_workers);
-    nPartitions = size * ncpu_workers; // assume homogeneous configuration across nodes
+    int nworkers = starpu_worker_get_count();
+    nPartitions = 4 * size * nworkers; // assume homogeneous configuration across nodes
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
         starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
