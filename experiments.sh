@@ -55,4 +55,4 @@ function starpu_cpu_gpu
   done
 }
 
-starpu_cpu_gpu
+starpu_gpu
