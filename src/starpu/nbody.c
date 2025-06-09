@@ -46,6 +46,7 @@ static struct starpu_codelet bodyForce_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {bodyForce_cuda},
 #endif
+    .where = STARPU_CUDA,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_R, STARPU_RW},
@@ -58,6 +59,7 @@ static struct starpu_codelet integratePositions_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {integratePositions_cuda},
 #endif
+    .where = STARPU_CUDA,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_RW, STARPU_R},
