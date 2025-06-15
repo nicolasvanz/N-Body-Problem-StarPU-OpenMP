@@ -18,7 +18,7 @@ int main(const int argc, const char **argv) {
   int nBodies = 2 << 12;
 
 #ifndef DEBUG
-  if (argc > 1) nBodies = 2 << atoi(argv[1]);
+  if (argc > 1) nBodies = 2 << (atoi(argv[1]) - 1);
 #else
   (void)argc;
   (void)argv;
