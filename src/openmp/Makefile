@@ -1,23 +1,25 @@
 # Compiler and flags
-CC = clang
-# CFLAGS = -fopenmp -foffload=nvptx-none -O3 -Wall -std=c99 -lm
-CFLAGS = -fopenmp -fopenmp-targets=nvptx64 -O3 -Wall -std=c99
+MPICC = mpicc
+CFLAGS = -fopenmp -fopenmp-targets=nvptx64 \
+         -Xopenmp-target=nvptx64 -march=sm_80 \
+         -O3 -Wall -std=c99
+LDFLAGS = -lm
 
 # Source files and target
-SRCS = nbody.c nbody_cpu.c nbody_gpu.c 
+SRCS = nbody.c nbody_cpu.c nbody_gpu.c
 OBJS = $(SRCS:.c=.o)
 TARGET = nbody
 
 # Default target
 all: $(TARGET)
 
-# Link object files to create the executable
+# Link object files to create the executable using MPI compiler
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(MPICC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-# Compile each .c file into .o
+# Compile each .c file into .o using MPI compiler
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(MPICC) $(CFLAGS) -c $< -o $@
 
 # Clean up build artifacts
 clean:
@@ -30,7 +32,7 @@ compare:
 	if [ -z "$$DIFF_OUTPUT" ]; then \
 		echo "All files match. No differences found."; \
 	else \
-		echo "The files differ. Note: cuda and cpu funcitons may show different floating precision"; \
+		echo "The files differ. Note: cuda and cpu functions may show different floating precision"; \
 		echo "$$DIFF_OUTPUT"; \
 	fi
 
