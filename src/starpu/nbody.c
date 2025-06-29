@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
     struct starpu_conf conf;
     starpu_conf_init(&conf);
     conf.sched_policy_name = "dmda";
-    conf.reserve_ncpus = 1;
+    // conf.reserve_ncpus = 1;
 
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
@@ -158,7 +158,6 @@ int main(int argc, char **argv) {
 
     const int nIters = 10;
     double start = starpu_timing_now();
-    unsigned long long where = 1ULL << (63 - cpu_combined_worker_id);
 
     for (int i = 0; i < nIters; i++) {
         for (int j = 0; j < nPartitions; j++) {
@@ -169,7 +168,7 @@ int main(int argc, char **argv) {
                                          STARPU_RW,
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
-                                         j,
+                                         j % size,
                                          0);
         }
 
@@ -181,7 +180,7 @@ int main(int argc, char **argv) {
                                          STARPU_R,
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
-                                         j,
+                                         j % size,
                                          0);
         }
         starpu_task_wait_for_all();
