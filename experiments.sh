@@ -52,6 +52,21 @@ function openmp_gpu
   done
 }
 
+function openmp_cpu_gpu
+{
+  (cd $dir_openmp && make clean && make)
+  for n in 19 20
+  do
+    prefix="openmp_cpu-gpu-$n"
+    run="mpirun --hostfile hostfile $dir_openmp/nbody $n"
+    for ip in $(awk '{print $1}' hostfile); do
+        echo "Copying to $ip..."
+        scp src/openmp/nbody ec2-user@$ip:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/openmp/
+    done
+    run_replications_no_calibrate "$run" "$prefix"
+  done
+}
+
 function starpu_gpu
 {
   (cd $dir_starpu && make clean && make)
@@ -82,4 +97,4 @@ function starpu_cpu_gpu
   done
 }
 
-openmp_gpu
+openmp_cpu_gpu

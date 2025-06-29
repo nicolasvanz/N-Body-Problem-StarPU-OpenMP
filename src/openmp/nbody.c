@@ -8,7 +8,7 @@
 
 // #define DEBUG
 #define BODYFORCE_USE_CPU 0
-#define INTEGRATEPOSITIONS_USE_CPU 0
+#define INTEGRATEPOSITIONS_USE_CPU 1
 
 extern void bodyForce_cpu(
     Pos *global_pos, Vel *local_vel, int local_start, int local_n, int n);
