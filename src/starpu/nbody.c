@@ -68,20 +68,19 @@ static struct starpu_codelet integratePositions_cl = {
 };
 
 int main(int argc, char **argv) {
-    int rank, size, ret;
+    int rank, size, ret, nPartitions;
     int nBodies = 2 << 12;
     Pos *pos;
     Vel *vel;
     starpu_mpi_tag_t tag = 0;
 
-#ifndef DEBUG
-    if (argc > 1)
-        nBodies = 2 << atoi(argv[1]);
-#else
-    printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
-    (void)argc;
-    (void)argv;
-#endif
+    if (argc > 2) {
+        nBodies = 2 << (atoi(argv[1]) - 1);
+        nPartitions = atoi(argv[2]);
+    } else {
+        printf("invalid parameters\n");
+        exit(-1);
+    }
 
 #ifdef DEBUG
     const char *initialized_pos = "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/"
@@ -103,24 +102,6 @@ int main(int argc, char **argv) {
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
-    printf("rank: %d, size: %d\n", rank, size);
-
-    int ncpu_workers = starpu_worker_get_count_by_type(STARPU_CPU_WORKER);
-    int ncuda_workers = starpu_worker_get_count_by_type(STARPU_CUDA_WORKER);
-    printf("cuda workers: %d\n", ncuda_workers);
-    printf("cpu workers: %d\n", ncpu_workers);
-    int *cpu_workers = (int *)malloc(sizeof(int) * ncpu_workers);
-    int *cuda_workers =
-        ncuda_workers > 0 ? (int *)malloc(sizeof(int) * ncuda_workers) : NULL;
-    starpu_worker_get_ids_by_type(STARPU_CPU_WORKER, cpu_workers, ncpu_workers);
-    if (cuda_workers)
-        starpu_worker_get_ids_by_type(
-            STARPU_CUDA_WORKER, cuda_workers, ncuda_workers);
-    int cpu_combined_worker_id =
-        starpu_combined_worker_assign_workerid(ncpu_workers, cpu_workers);
-
-    printf("combined worker id: %d\n", cpu_combined_worker_id);
-    printf("worker count: %d\n", starpu_worker_get_count());
 
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
@@ -153,13 +134,13 @@ int main(int argc, char **argv) {
     starpu_vector_data_register(
         &pos_handle, memory_region, pos_ptr, nBodies, sizeof(Pos));
     starpu_data_handle_t *pos_handles =
-        (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * size);
+        (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * nPartitions);
 
     starpu_data_handle_t vel_handle;
     starpu_vector_data_register(
         &vel_handle, memory_region, vel_ptr, nBodies, sizeof(Vel));
     starpu_data_handle_t *vel_handles =
-        (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * size);
+        (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * nPartitions);
 
     // tagging mpi data
     starpu_mpi_data_register(pos_handle, tag++, 0);
@@ -167,10 +148,10 @@ int main(int argc, char **argv) {
 
     // async partitioning vectors
     struct starpu_data_filter filter = {
-        .filter_func = starpu_vector_filter_block, .nchildren = size};
+        .filter_func = starpu_vector_filter_block, .nchildren = nPartitions};
     starpu_data_partition_plan(pos_handle, &filter, pos_handles);
     starpu_data_partition_plan(vel_handle, &filter, vel_handles);
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < nPartitions; i++) {
         starpu_mpi_data_register(vel_handles[i], tag++, 0);
         starpu_mpi_data_register(pos_handles[i], tag++, 0);
     }
@@ -180,7 +161,7 @@ int main(int argc, char **argv) {
     unsigned long long where = 1ULL << (63 - cpu_combined_worker_id);
 
     for (int i = 0; i < nIters; i++) {
-        for (int j = 0; j < size; j++) {
+        for (int j = 0; j < nPartitions; j++) {
             ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
                                          &bodyForce_cl,
                                          STARPU_R,
@@ -189,12 +170,10 @@ int main(int argc, char **argv) {
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
                                          j,
-                                         STARPU_EXECUTE_WHERE,
-                                         where,
                                          0);
         }
 
-        for (int j = 0; j < size; j++) {
+        for (int j = 0; j < nPartitions; j++) {
             ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
                                          &integratePositions_cl,
                                          STARPU_RW,
@@ -203,18 +182,16 @@ int main(int argc, char **argv) {
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
                                          j,
-                                         //  STARPU_EXECUTE_ON_WORKER,
-                                         //  cpu_combined_worker_id,
                                          0);
         }
         starpu_task_wait_for_all();
     }
     starpu_task_wait_for_all();
 
-    starpu_data_unpartition_submit(vel_handle, size, vel_handles, -1);
-    starpu_data_unpartition_submit(pos_handle, size, pos_handles, -1);
-    starpu_data_partition_clean(pos_handle, size, pos_handles);
-    starpu_data_partition_clean(vel_handle, size, vel_handles);
+    starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
+    starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
+    starpu_data_partition_clean(pos_handle, nPartitions, pos_handles);
+    starpu_data_partition_clean(vel_handle, nPartitions, vel_handles);
 
     if (rank == 0) {
         starpu_data_acquire(pos_handle, STARPU_R);
