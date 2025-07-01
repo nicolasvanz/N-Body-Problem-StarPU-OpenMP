@@ -43,7 +43,27 @@ function openmp_cpu
   for n in 19 20
   do
     prefix="openmp_cpu-$n"
-    run="OMP_NUM_THREADS=36 $dir_openmp/nbody $n"
+    run="OMP_NUM_THREADS=4 $dir_openmp/nbody $n"
+    run_replications_no_calibrate "$run" "$prefix"
+  done
+}
+function openmp_cpu_gpu
+{
+  (cd $dir_openmp && make clean && make)
+  for n in 19 20
+  do
+    prefix="openmp_cpu_gpu-$n"
+    run="OMP_NUM_THREADS=32 $dir_openmp/nbody $n"
+    run_replications_no_calibrate "$run" "$prefix"
+  done
+}
+function openmp_gpu
+{
+  (cd $dir_openmp && make clean && make)
+  for n in 19 20
+  do
+    prefix="openmp_gpu-$n"
+    run="$dir_openmp/nbody $n"
     run_replications_no_calibrate "$run" "$prefix"
   done
 }
@@ -85,4 +105,4 @@ function starpu_cpu_gpu
   replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
 }
 
-openmp_cpu
+openmp_gpu

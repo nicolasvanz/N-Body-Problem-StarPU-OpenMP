@@ -6,8 +6,8 @@
 #include "../include/files.h"
 
 // #define DEBUG
-#define BODYFORCE_USE_CPU 1
-#define INTEGRATEPOSITIONS_USE_CPU 1
+#define BODYFORCE_USE_CPU 0
+#define INTEGRATEPOSITIONS_USE_CPU 0
 
 extern void bodyForce_cpu(Pos *p, Vel *v, int n);
 extern void bodyForce_gpu(Pos *p, Vel *v, int n);
