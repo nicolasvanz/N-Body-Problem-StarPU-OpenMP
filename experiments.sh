@@ -105,4 +105,4 @@ function starpu_cpu_gpu
   replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
 }
 
-openmp_gpu
+openmp_cpu_gpu
