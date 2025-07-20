@@ -31,7 +31,7 @@ function run_replications_no_calibrate
   prefix=$2
 
   (cd $dir_results && mkdir -p $prefix)
-  for i in 1
+  for i in {1..2}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
@@ -59,5 +59,5 @@ function starpu_cpu
   done
 }
 
-starpu_cpu
-#openmp_cpu
+# starpu_cpu
+openmp_cpu
