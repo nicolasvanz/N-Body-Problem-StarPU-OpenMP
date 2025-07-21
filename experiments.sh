@@ -19,7 +19,19 @@ function run_replications
 
   (cd $dir_results && mkdir -p $prefix)
   eval "$command" #calibrate
-  for i in {1..3}
+  for i in {1..2}
+  do
+    eval "$command" > "$dir_results/$prefix/$i"
+  done
+}
+
+function run_replications_no_calibrate
+{
+  command=$1 # calibrate
+  prefix=$2
+
+  (cd $dir_results && mkdir -p $prefix)
+  for i in {1..2}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
@@ -28,38 +40,24 @@ function run_replications
 function starpu_gpu
 {
   (cd $dir_starpu && make clean && make)
-  for n in 18 19
+  for n in 19 20
   do
-    prefix="starpu_gpu-$n"
+    prefix="g6.16xlarge.starpu_gpu-$n"
     run="$dir_starpu/nbody $n"
     run_replications "$run" "$prefix"
   done
 }
 
-function starpu_cpu
+function openmp_gpu
 {
-  (cd $dir_starpu && make clean && make)
-  for n in 13 14
+  (cd $dir_openmp && make clean && make)
+  for n in 19 20
   do
-    prefix="starpu_cpu-$n"
-    run="$dir_starpu/nbody $n"
-    run_replications "$run" "$prefix"
+    prefix="g6.16xlarge.openmp_gpu-$n"
+    run="OMP_NUM_THREADS=32 $dir_openmp/nbody $n"
+    run_replications_no_calibrate "$run" "$prefix"
   done
 }
 
-function starpu_cpu_gpu
-{
-  starpu_parts_macro="#define PARTS"
-  starpu_parts_default="$starpu_parts_macro 1"
-  replace "$dir_starpu" "$starpu_parts_default" "$starpu_parts_macro $experiments_starpu_parts"
-  (cd $dir_starpu && make clean && make)
-  for ((n=nbodies_initial_index; n<=nbodies_final_index; n++));
-  do
-    prefix="starpu_cpu_gpu-$n"
-    run="$dir_starpu/nbody $n"
-    run_replications "$run" "$prefix"
-  done
-  replace "$dir_starpu" "$starpu_parts_macro $experiments_starpu_parts" "$starpu_parts_default"
-}
-
-starpu_gpu
+openmp_gpu
+# starpu_gpu
