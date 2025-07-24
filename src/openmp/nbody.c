@@ -6,7 +6,7 @@
 #include "../include/files.h"
 
 // #define DEBUG
-#define BODYFORCE_USE_CPU 1
+#define BODYFORCE_USE_CPU 0
 #define INTEGRATEPOSITIONS_USE_CPU 1
 
 extern void bodyForce_cpu(Pos *p, Vel *v, int n);
@@ -18,7 +18,7 @@ int main(const int argc, const char **argv) {
   int nBodies = 2 << 12;
 
 #ifndef DEBUG
-  if (argc > 1) nBodies = 2 << atoi(argv[1]);
+  if (argc > 1) nBodies = 2 << (atoi(argv[1]) - 1);
 #else
   (void)argc;
   (void)argv;
