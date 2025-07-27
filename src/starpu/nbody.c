@@ -46,7 +46,6 @@ static struct starpu_codelet bodyForce_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {bodyForce_cuda},
 #endif
-    .where = STARPU_CUDA,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_R, STARPU_RW},
@@ -59,7 +58,6 @@ static struct starpu_codelet integratePositions_cl = {
 #ifdef STARPU_USE_CUDA
     .cuda_funcs = {integratePositions_cuda},
 #endif
-    .where = STARPU_CUDA,
     .max_parallelism = INT_MAX,
     .nbuffers = 2,
     .modes = {STARPU_RW, STARPU_R},
@@ -75,7 +73,7 @@ int main(int argc, char **argv) {
 
 #ifndef DEBUG
     if (argc > 1)
-        nBodies = 2 << atoi(argv[1]);
+        nBodies = 2 << (atoi(argv[1]) - 1);
 #else
     printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
     (void)argc;
@@ -99,8 +97,7 @@ int main(int argc, char **argv) {
 
     starpu_init(&conf);
 
-    int nworkers = starpu_worker_get_count();
-    int nPartitions = nworkers;
+    int nPartitions = 4 * starpu_worker_get_count();
 
     starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
     starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
@@ -157,7 +154,7 @@ int main(int argc, char **argv) {
                                      0);
         }
 
-        for (int j = 0; j < size; j++) {
+        for (int j = 0; j < nPartitions; j++) {
             ret = starpu_task_insert(&integratePositions_cl,
                                      STARPU_RW,
                                      pos_handles[j],
