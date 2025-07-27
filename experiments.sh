@@ -59,5 +59,5 @@ function openmp_gpu
   done
 }
 
-openmp_gpu
-# starpu_gpu
+# openmp_gpu
+starpu_gpu
