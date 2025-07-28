@@ -19,7 +19,7 @@ function run_replications
 
   (cd $dir_results && mkdir -p $prefix)
   eval "$command" #calibrate
-  for i in {1..3}
+  for i in {1..2}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
