@@ -85,10 +85,10 @@ function openmp_cpu_gpu
 function starpu_gpu
 {
   (cd $dir_starpu && make clean && make)
-  for n in 18 19
+  for n in 19 20
   do
-    prefix="starpu_gpu-$n"
-    run="mpirun --hostfile hostfile -map-by slot:PE=4 $dir_starpu/nbody $n"
+    prefix="g6.16xlarge.starpu_gpu-$n"
+    run="mpirun --hostfile hostfile -map-by slot:PE=32 $dir_starpu/nbody $n"
     for ip in $(awk '{print $1}' hostfile); do
         echo "Copying to $ip..."
         scp src/starpu/nbody ec2-user@$ip:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
@@ -100,10 +100,10 @@ function starpu_gpu
 function starpu_cpu_gpu
 {
   (cd $dir_starpu && make clean && make)
-  for n in 18 19
+  for n in 19 20
   do
     prefix="starpu_cpu_gpu-$n"
-    run="mpirun --hostfile hostfile -map-by slot:PE=4 $dir_starpu/nbody $n"
+    run="mpirun --hostfile hostfile -map-by slot:PE=32 $dir_starpu/nbody $n"
     for ip in $(awk '{print $1}' hostfile); do
         echo "Copying to $ip..."
         scp src/starpu/nbody ec2-user@$ip:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
@@ -112,4 +112,4 @@ function starpu_cpu_gpu
   done
 }
 
-openmp_cpu
+starpu_gpu
