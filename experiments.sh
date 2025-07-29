@@ -31,7 +31,7 @@ function run_replications_no_calibrate
   prefix=$2
 
   (cd $dir_results && mkdir -p $prefix)
-  for i in 1
+  for i in {1..2}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
@@ -57,7 +57,7 @@ function openmp_gpu
   (cd $dir_openmp && make clean && make)
   for n in 19 20
   do
-    prefix="openmp_gpu-$n"
+    prefix="g6.16xlarge.openmp_gpu-$n"
     run="mpirun --hostfile hostfile $dir_openmp/nbody $n"
     for ip in $(awk '{print $1}' hostfile); do
         echo "Copying to $ip..."
@@ -112,4 +112,5 @@ function starpu_cpu_gpu
   done
 }
 
-starpu_gpu
+# starpu_gpu
+openmp_gpu
