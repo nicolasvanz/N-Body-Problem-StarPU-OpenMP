@@ -73,13 +73,14 @@ int main(int argc, char **argv) {
     Vel *vel;
     starpu_mpi_tag_t tag = 0;
 
-    if (argc > 2) {
+#ifndef DEBUG
+    if (argc > 1)
         nBodies = 2 << (atoi(argv[1]) - 1);
-        nPartitions = atoi(argv[2]);
-    } else {
-        printf("invalid parameters\n");
-        exit(-1);
-    }
+#else
+    printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
+    (void)argc;
+    (void)argv;
+#endif
 
 #ifdef DEBUG
     const char *initialized_pos = "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/"
@@ -102,8 +103,7 @@ int main(int argc, char **argv) {
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
 
-    // int nworkers = starpu_worker_get_count();
-    // nPartitions = 4 * size * nworkers; // assume homogeneous configuration
+    nPartitions = size * starpu_worker_get_count();
     // across nodes
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
