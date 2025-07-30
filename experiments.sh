@@ -19,7 +19,19 @@ function run_replications
 
   (cd $dir_results && mkdir -p $prefix)
   eval "$command" #calibrate
-  for i in 1
+  for i in {1..2}
+  do
+    eval "$command" > "$dir_results/$prefix/$i"
+  done
+}
+
+function run_replications_no_calibrate
+{
+  command=$1 # calibrate
+  prefix=$2
+
+  (cd $dir_results && mkdir -p $prefix)
+  for i in {1..2}
   do
     eval "$command" > "$dir_results/$prefix/$i"
   done
@@ -40,4 +52,20 @@ function starpu_cpu
   done
 }
 
-starpu_cpu
+function openmp_cpu
+{
+  (cd $dir_openmp && make clean && make)
+  for n in 19 20
+  do
+    prefix="g6.16xlarge.openmp_cpu-$n"
+    run="mpirun --hostfile hostfile --bind-to numa $dir_openmp/nbody $n"
+    for ip in $(awk '{print $1}' hostfile); do
+        echo "Copying to $ip..."
+        scp src/openmp/nbody ec2-user@$ip:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/openmp/
+    done
+    run_replications_no_calibrate "$run" "$prefix"
+  done
+}
+
+
+openmp_cpu
