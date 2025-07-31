@@ -74,13 +74,14 @@ int main(int argc, char **argv) {
     Vel *vel;
     starpu_mpi_tag_t tag = 0;
 
-    if (argc > 2) {
+#ifndef DEBUG
+    if (argc > 1)
         nBodies = 2 << (atoi(argv[1]) - 1);
-        nPartitions = atoi(argv[2]);
-    } else {
-        printf("invalid parameters\n");
-        exit(-1);
-    }
+#else
+    printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
+    (void)argc;
+    (void)argv;
+#endif
 
 #ifdef DEBUG
     const char *initialized_pos = "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/"
@@ -102,6 +103,8 @@ int main(int argc, char **argv) {
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
+
+    nPartitions = size*starpu_worker_get_count();
 
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
@@ -133,14 +136,14 @@ int main(int argc, char **argv) {
     starpu_data_handle_t pos_handle;
     starpu_vector_data_register(
         &pos_handle, memory_region, pos_ptr, nBodies, sizeof(Pos));
-    starpu_data_handle_t *pos_handles =
-        (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * nPartitions);
+    starpu_data_handle_t *pos_handles = (starpu_data_handle_t *)malloc(
+        sizeof(starpu_data_handle_t) * nPartitions);
 
     starpu_data_handle_t vel_handle;
     starpu_vector_data_register(
         &vel_handle, memory_region, vel_ptr, nBodies, sizeof(Vel));
-    starpu_data_handle_t *vel_handles =
-        (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * nPartitions);
+    starpu_data_handle_t *vel_handles = (starpu_data_handle_t *)malloc(
+        sizeof(starpu_data_handle_t) * nPartitions);
 
     // tagging mpi data
     starpu_mpi_data_register(pos_handle, tag++, 0);
@@ -183,7 +186,6 @@ int main(int argc, char **argv) {
                                          j % size,
                                          0);
         }
-        starpu_task_wait_for_all();
     }
     starpu_task_wait_for_all();
 

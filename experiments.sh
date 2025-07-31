@@ -42,8 +42,8 @@ function starpu_cpu
   (cd $dir_starpu && make clean && make)
   for n in 19 20
   do
-    prefix="starpu_cpu-$n"
-    run="mpirun --hostfile hostfile --bind-to numa $dir_starpu/nbody $n 68"
+    prefix="g6.16xlarge.starpu_cpu-$n"
+    run="mpirun --hostfile hostfile -map-by slot:PE=32 $dir_starpu/nbody $n"
     for ip in $(awk '{print $1}' hostfile); do
         echo "Copying to $ip..."
         scp src/starpu/nbody ec2-user@$ip:/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/starpu/
@@ -68,4 +68,4 @@ function openmp_cpu
 }
 
 
-openmp_cpu
+starpu_cpu
