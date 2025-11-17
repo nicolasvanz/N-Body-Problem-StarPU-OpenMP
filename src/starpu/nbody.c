@@ -76,6 +76,8 @@ int main(int argc, char **argv) {
 #ifndef DEBUG
     if (argc > 1)
         nBodies = 2 << (atoi(argv[1]) - 1);
+    if (argc > 2)
+        nPartitions = atoi(argv[2]);
 #else
     printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
     (void)argc;
@@ -103,7 +105,9 @@ int main(int argc, char **argv) {
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
 
-    nPartitions = size * starpu_worker_get_count();
+    // Set default nPartitions if not provided via command line
+    if (argc <= 2)
+        nPartitions = size * starpu_worker_get_count();
     // across nodes
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
