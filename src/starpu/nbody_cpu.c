@@ -20,48 +20,59 @@
 
 #include "../include/body.h"
 
-void integratePositions_cpu(void *buffers[], void *_args) {
+
+static void integratePositions_cpu(void *buffers[], void *_args)
+{
     (void)_args;
 
-    /* length of the vector */
-    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
+    Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);  // STARPU_RW
+    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);  // STARPU_RW
+    Vel *a = (Vel *)STARPU_VECTOR_GET_PTR(buffers[2]);  // STARPU_R
 
-    /* local copy of the vector pointer */
-    Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
-    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+    unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
 
-    for (unsigned i = 0; i < nVel; i++) {
+    for (unsigned i = 0; i < n; i++) {
+        /* v_{t+1} = v_t + dt * a */
+        v[i].vx += dt * a[i].vx;
+        v[i].vy += dt * a[i].vy;
+        v[i].vz += dt * a[i].vz;
+
+        /* x_{t+1} = x_t + dt * v_{t+1} */
         p[i].x += v[i].vx * dt;
         p[i].y += v[i].vy * dt;
         p[i].z += v[i].vz * dt;
+
+        /* clear acc for next step. does init acc_init is called when i reuse the vector? */
+        a[i].vx = 0.0f;
+        a[i].vy = 0.0f;
+        a[i].vz = 0.0f;
     }
 }
 
-void bodyForce_cpu(void *buffers[], void *_args) {
+static void bodyForce_tile_cpu(void *buffers[], void *_args)
+{
     (void)_args;
 
-    /* length of the vector */
-    unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);
-    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
+    /* targets: partition I */
+    Pos *pI = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+    unsigned int nI = STARPU_VECTOR_GET_NX(buffers[0]);
 
-    /* local copy of the vector pointer */
-    Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
-    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
+    /* sources: partition J */
+    Pos *pJ = (Pos *)STARPU_VECTOR_GET_PTR(buffers[1]);
+    unsigned int nJ = STARPU_VECTOR_GET_NX(buffers[1]);
 
-    /* extract the value arguments */
-    unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
+    /* acceleration for targets in I (this is the local per-node buffer) */
+    Vel *a  = (Vel *)STARPU_VECTOR_GET_PTR(buffers[2]);
 
-    for (unsigned i = 0; i < nVel; i++) {
-        float Fx = 0.0f;
-        float Fy = 0.0f;
-        float Fz = 0.0f;
+    for (unsigned i = 0; i < nI; i++) {
+        float Fx = 0.0f, Fy = 0.0f, Fz = 0.0f;
 
-        for (unsigned j = 0; j < nPos; j++) {
-            float dx = p[j].x - p[i + offset].x;
-            float dy = p[j].y - p[i + offset].y;
-            float dz = p[j].z - p[i + offset].z;
+        for (unsigned j = 0; j < nJ; j++) {
+            float dx = pJ[j].x - pI[i].x;
+            float dy = pJ[j].y - pI[i].y;
+            float dz = pJ[j].z - pI[i].z;
             float distSqr = dx * dx + dy * dy + dz * dz + SOFTENING;
-            float invDist = my_rsqrtf(distSqr);
+            float invDist  = my_rsqrtf(distSqr);
             float invDist3 = invDist * invDist * invDist;
 
             Fx += dx * invDist3;
@@ -69,8 +80,8 @@ void bodyForce_cpu(void *buffers[], void *_args) {
             Fz += dz * invDist3;
         }
 
-        v[i].vx += dt * Fx;
-        v[i].vy += dt * Fy;
-        v[i].vz += dt * Fz;
+        a[i].vx += Fx;
+        a[i].vy += Fy;
+        a[i].vz += Fz;
     }
 }

@@ -30,165 +30,206 @@
 
 // #define DEBUG
 
-extern void bodyForce_cpu(void *buffers[], void *_args);
+extern void bodyForce_tile_cpu(void *buffers[], void *_args);
 // extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);
 // extern void integratePositions_cuda(void *buffers[], void *_args);
 
-static struct starpu_perfmodel bodyforce_perfmodel = {
-    .type = STARPU_HISTORY_BASED, .symbol = "bodyforce"};
+static void acc_init_cpu(void *buffers[], void *cl_arg)
+{
+    (void)cl_arg;
+    Vel *a = (Vel *)STARPU_VECTOR_GET_PTR(buffers[0]);
+    unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
 
+    for (unsigned i = 0; i < n; i++) {
+        a[i].vx = 0.0f;
+        a[i].vy = 0.0f;
+        a[i].vz = 0.0f;
+    }
+}
+
+static void acc_redux_cpu(void *buffers[], void *cl_arg)
+{
+    (void)cl_arg;
+    Vel *dst = (Vel *)STARPU_VECTOR_GET_PTR(buffers[0]); // STARPU_RW
+    Vel *src = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]); // STARPU_R
+    unsigned int n = STARPU_VECTOR_GET_NX(buffers[0]);
+
+    for (unsigned i = 0; i < n; i++) {
+        dst[i].vx += src[i].vx;
+        dst[i].vy += src[i].vy;
+        dst[i].vz += src[i].vz;
+    }
+}
+
+static struct starpu_codelet acc_init_cl = {
+    .cpu_funcs = { acc_init_cpu },
+    .nbuffers  = 1,
+    .modes     = { STARPU_W },
+};
+
+static struct starpu_codelet acc_redux_cl = {
+    .cpu_funcs = { acc_redux_cpu },
+    .nbuffers  = 2,
+    .modes     = { STARPU_RW, STARPU_R },
+};
+
+
+/* body force */
+static struct starpu_perfmodel bodyforce_tile_perfmodel = {
+    .type   = STARPU_HISTORY_BASED,
+    .symbol = "bodyforce_tile",
+};
+static struct starpu_codelet bodyForce_tile_cl = {
+    .cpu_funcs = { bodyForce_tile_cpu },
+    .nbuffers  = 3,
+    .modes     = { STARPU_R, STARPU_R, STARPU_MPI_REDUX }, // pos_I, pos_J, acc_I
+    .model     = &bodyforce_tile_perfmodel,
+};
+
+/* integrate positions */
 static struct starpu_perfmodel integratepositions_perfmodel = {
-    .type = STARPU_HISTORY_BASED, .symbol = "integratepositions"};
-
-static struct starpu_codelet bodyForce_cl = {
-    .cpu_funcs = {bodyForce_cpu},
-
-    // #ifdef STARPU_USE_CUDA
-    //     .cuda_funcs = {bodyForce_cuda},
-    // #endif
-    .nbuffers = 2,
-    .modes = {STARPU_R, STARPU_RW},
-    .model = &bodyforce_perfmodel,
+    .type   = STARPU_HISTORY_BASED,
+    .symbol = "integratepositions",
 };
 
 static struct starpu_codelet integratePositions_cl = {
-    .cpu_funcs = {integratePositions_cpu},
-
-    // #ifdef STARPU_USE_CUDA
-    //     .cuda_funcs = {integratePositions_cuda},
-    // #endif
-    .nbuffers = 2,
-    .modes = {STARPU_RW, STARPU_R},
-    .model = &integratepositions_perfmodel,
+    .cpu_funcs = { integratePositions_cpu },
+    .nbuffers  = 3,
+    .modes     = { STARPU_RW, STARPU_RW, STARPU_R }, // pos_I, vel_I, acc_I
+    .model     = &integratepositions_perfmodel,
 };
 
 int main(int argc, char **argv) {
-    int rank, size, ret, nPartitions;
+    int rank, size, ret;
     int nBodies = 2 << 12;
-    Pos *pos;
-    Vel *vel;
-    starpu_mpi_tag_t tag = 0;
 
-#ifndef DEBUG
     if (argc > 1)
         nBodies = 2 << (atoi(argv[1]) - 1);
-#else
-    printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
-    (void)argc;
-    (void)argv;
-#endif
-
-#ifdef DEBUG
-    const char *initialized_pos = "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/"
-                                  "src/debug/initialized_pos_12";
-    const char *initialized_vel = "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/"
-                                  "src/debug/initialized_vel_12";
-    const char *computed_pos =
-        "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/debug/computed_pos_12";
-    const char *computed_vel =
-        "/home/ec2-user/N-Body-Problem-StarPU-OpenMP/src/debug/computed_vel_12";
-#endif
 
     setbuf(stdout, NULL);
     struct starpu_conf conf;
     starpu_conf_init(&conf);
     conf.sched_policy_name = "dmda";
-    // conf.reserve_ncpus = 1;
 
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
 
-    nPartitions = size * starpu_worker_get_count();
+    int nPartitions = size * starpu_worker_get_count();
+
+    if (nBodies % nPartitions != 0 && rank == 0) {
+        fprintf(stderr,
+            "WARNING: nBodies (%d) not divisible by nPartitions (%d). "
+            "This code assumes equal-sized partitions.\n",
+            nBodies, nPartitions);
+    }
+
+    Pos *pos;
+    Vel *vel;
+    Vel *acc;
 
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
         starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
+        starpu_malloc((void **)&acc, sizeof(Vel) * nBodies);
 
-#ifdef DEBUG
-        read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
-        read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
-#else
         for (int i = 0; i < nBodies; i++) {
-            pos[i].x = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-            pos[i].y = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
-            pos[i].z = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+            pos[i].x = ((float)rand() / (float)(RAND_MAX)) * 1000000.0f;
+            pos[i].y = ((float)rand() / (float)(RAND_MAX)) * 1000000.0f;
+            pos[i].z = ((float)rand() / (float)(RAND_MAX)) * 1000000.0f;
+            vel[i].vx = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+            vel[i].vy = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+            vel[i].vz = ((float)rand() / (float)(RAND_MAX)) * 100.0f;
+            acc[i].vx = 0.0f;
+            acc[i].vy = 0.0f;
+            acc[i].vz = 0.0f;
         }
-        for (int i = 0; i < nBodies; i++) {
-            vel[i].vx = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-            vel[i].vy = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-            vel[i].vz = ((float)rand() / (float)(RAND_MAX)) * 10.0f;
-        }
-#endif
     }
 
     // vectors are allocated in rank 0
     int memory_region = (rank == 0) ? STARPU_MAIN_RAM : -1;
     uintptr_t pos_ptr = (rank == 0) ? (uintptr_t)pos : 0;
     uintptr_t vel_ptr = (rank == 0) ? (uintptr_t)vel : 0;
+    uintptr_t acc_ptr = (rank == 0) ? (uintptr_t)acc : 0;
 
-    /* starpu data handles */
-    starpu_data_handle_t pos_handle;
+    starpu_data_handle_t pos_handle, vel_handle, acc_handle;
+
     starpu_vector_data_register(
-        &pos_handle, memory_region, pos_ptr, nBodies, sizeof(Pos));
-    starpu_data_handle_t *pos_handles = (starpu_data_handle_t *)malloc(
-        sizeof(starpu_data_handle_t) * nPartitions);
-
-    starpu_data_handle_t vel_handle;
+        &pos_handle, memory_region, pos_ptr, nBodies, sizeof(Pos)
+    );
     starpu_vector_data_register(
-        &vel_handle, memory_region, vel_ptr, nBodies, sizeof(Vel));
-    starpu_data_handle_t *vel_handles = (starpu_data_handle_t *)malloc(
-        sizeof(starpu_data_handle_t) * nPartitions);
+        &vel_handle, memory_region, vel_ptr, nBodies, sizeof(Vel)
+    );
+    starpu_vector_data_register(
+        &acc_handle, memory_region, acc_ptr, nBodies, sizeof(Vel)
+    );
 
-    // tagging mpi data
-    starpu_mpi_data_register(pos_handle, tag++, 0);
-    starpu_mpi_data_register(vel_handle, tag++, 0);
+    starpu_data_set_reduction_methods(acc_handle, &acc_redux_cl, &acc_init_cl);
 
-    // async partitioning vectors
+    starpu_data_handle_t *pos_handles = (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * nPartitions);
+    starpu_data_handle_t *vel_handles = (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * nPartitions);
+    starpu_data_handle_t *acc_handles = (starpu_data_handle_t *)malloc(sizeof(starpu_data_handle_t) * nPartitions);
+
     struct starpu_data_filter filter = {
-        .filter_func = starpu_vector_filter_block, .nchildren = nPartitions};
+        .filter_func = starpu_vector_filter_block,
+        .nchildren = nPartitions
+    };
+
     starpu_data_partition_plan(pos_handle, &filter, pos_handles);
     starpu_data_partition_plan(vel_handle, &filter, vel_handles);
+    starpu_data_partition_plan(acc_handle, &filter, acc_handles);
+
+    starpu_mpi_tag_t tag = 0;
+
+    starpu_mpi_data_register(pos_handle, tag++, 0);
+    starpu_mpi_data_register(vel_handle, tag++, 0);
+    starpu_mpi_data_register(acc_handle, tag++, 0);
+
     for (int i = 0; i < nPartitions; i++) {
-        starpu_mpi_data_register(vel_handles[i], tag++, 0);
         starpu_mpi_data_register(pos_handles[i], tag++, 0);
+        starpu_mpi_data_register(vel_handles[i], tag++, 0);
+        starpu_mpi_data_register(acc_handles[i], tag++, 0);
     }
 
     const int nIters = 10;
     double start = starpu_timing_now();
 
-    for (int i = 0; i < nIters; i++) {
-        for (int j = 0; j < nPartitions; j++) {
-            ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
-                                         &bodyForce_cl,
-                                         STARPU_R,
-                                         pos_handle,
-                                         STARPU_RW,
-                                         vel_handles[j],
-                                         STARPU_EXECUTE_ON_NODE,
-                                         j % size,
-                                         0);
+    for (int iter = 0; iter < nIters; iter++) {
+        for (int i = 0; i < nPartitions; i++) {
+            for (int j = 0; j < nPartitions; j++) {
+                starpu_mpi_task_insert(
+                    MPI_COMM_WORLD,
+                    &bodyForce_tile_cl,
+                    STARPU_R, pos_handles[i],
+                    STARPU_R, pos_handles[j],
+                    STARPU_MPI_REDUX, acc_handles[i],
+                    STARPU_EXECUTE_ON_NODE, i % size
+                );
+            }
         }
 
-        for (int j = 0; j < nPartitions; j++) {
-            ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
-                                         &integratePositions_cl,
-                                         STARPU_RW,
-                                         pos_handles[j],
-                                         STARPU_R,
-                                         vel_handles[j],
-                                         STARPU_EXECUTE_ON_NODE,
-                                         j % size,
-                                         0);
+        for (int i = 0; i < nPartitions; i++) {
+            starpu_mpi_task_insert(
+                MPI_COMM_WORLD, 
+                &integratePositions_cl,
+                STARPU_RW, pos_handles[i],
+                STARPU_RW, vel_handles[i],
+                STARPU_R, acc_handles[i],
+                STARPU_EXECUTE_ON_NODE, i % size
+            );
         }
     }
     starpu_task_wait_for_all();
-
+    
     starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
     starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
+    starpu_data_unpartition_submit(acc_handle, nPartitions, acc_handles, -1);
+    
+    starpu_task_wait_for_all();
     starpu_data_partition_clean(pos_handle, nPartitions, pos_handles);
     starpu_data_partition_clean(vel_handle, nPartitions, vel_handles);
+    starpu_data_partition_clean(acc_handle, nPartitions, acc_handles);
 
     if (rank == 0) {
         starpu_data_acquire(pos_handle, STARPU_R);
@@ -197,23 +238,22 @@ int main(int argc, char **argv) {
         vel = starpu_data_get_local_ptr(vel_handle);
         double timing = starpu_timing_now() - start; // in microsseconds
         printf("%lf\n", timing);
-#ifdef DEBUG
-        write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
-        write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
-#endif
         starpu_data_release(pos_handle);
         starpu_data_release(vel_handle);
     }
 
     starpu_data_unregister(pos_handle);
     starpu_data_unregister(vel_handle);
+    starpu_data_unregister(acc_handle);
 
     if (rank == 0) {
         starpu_free_noflag(pos, sizeof(Pos) * nBodies);
         starpu_free_noflag(vel, sizeof(Vel) * nBodies);
+        starpu_free_noflag(acc, sizeof(Vel) * nBodies);
     }
     free(pos_handles);
     free(vel_handles);
+    free(acc_handles);
 
     starpu_mpi_shutdown();
 }
