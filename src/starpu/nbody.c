@@ -71,7 +71,7 @@ static struct starpu_codelet acc_init_cl = {
 static struct starpu_codelet acc_redux_cl = {
     .cpu_funcs = { acc_redux_cpu },
     .nbuffers  = 2,
-    .modes     = { STARPU_RW, STARPU_R },
+    .modes     = { STARPU_RW | STARPU_COMMUTE, STARPU_R },
 };
 
 
@@ -83,7 +83,7 @@ static struct starpu_perfmodel bodyforce_tile_perfmodel = {
 static struct starpu_codelet bodyForce_tile_cl = {
     .cpu_funcs = { bodyForce_tile_cpu },
     .nbuffers  = 3,
-    .modes     = { STARPU_R, STARPU_R, STARPU_MPI_REDUX }, // pos_I, pos_J, acc_I
+    .modes     = { STARPU_R, STARPU_R, STARPU_RW | STARPU_COMMUTE }, // pos_I, pos_J, acc_I
     .model     = &bodyforce_tile_perfmodel,
 };
 
@@ -101,7 +101,7 @@ static struct starpu_codelet integratePositions_cl = {
 };
 
 int main(int argc, char **argv) {
-    int rank, size, ret;
+    int rank, size;
     int nBodies = 2 << 12;
 
     if (argc > 1)
@@ -116,13 +116,14 @@ int main(int argc, char **argv) {
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
 
-    int nPartitions = size * starpu_worker_get_count();
+    int nPartitions = 8;
 
     if (nBodies % nPartitions != 0 && rank == 0) {
         fprintf(stderr,
             "WARNING: nBodies (%d) not divisible by nPartitions (%d). "
-            "This code assumes equal-sized partitions.\n",
+            "This code assumes equal-sized partitions. exitting\n",
             nBodies, nPartitions);
+        exit(-1);
     }
 
     Pos *pos;
@@ -204,7 +205,8 @@ int main(int argc, char **argv) {
                     STARPU_R, pos_handles[i],
                     STARPU_R, pos_handles[j],
                     STARPU_MPI_REDUX, acc_handles[i],
-                    STARPU_EXECUTE_ON_NODE, i % size
+                    STARPU_EXECUTE_ON_NODE, i % size,
+                    0
                 );
             }
         }
@@ -216,7 +218,8 @@ int main(int argc, char **argv) {
                 STARPU_RW, pos_handles[i],
                 STARPU_RW, vel_handles[i],
                 STARPU_R, acc_handles[i],
-                STARPU_EXECUTE_ON_NODE, i % size
+                STARPU_EXECUTE_ON_NODE, i % size,
+                0
             );
         }
     }

@@ -21,7 +21,7 @@
 #include "../include/body.h"
 
 
-static void integratePositions_cpu(void *buffers[], void *_args)
+void integratePositions_cpu(void *buffers[], void *_args)
 {
     (void)_args;
 
@@ -49,7 +49,7 @@ static void integratePositions_cpu(void *buffers[], void *_args)
     }
 }
 
-static void bodyForce_tile_cpu(void *buffers[], void *_args)
+void bodyForce_tile_cpu(void *buffers[], void *_args)
 {
     (void)_args;
 
