@@ -15,7 +15,6 @@
  */
 
 #include <starpu.h>
-#include <starpu_mpi.h>
 
 #include "../include/body.h"
 

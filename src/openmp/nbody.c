@@ -1,23 +1,38 @@
-#include <mpi.h>
 #include <omp.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "../include/body.h"
+#include "../include/debug_paths.h"
 #include "../include/files.h"
+#include "../include/options.h"
 
-#define DEBUG
-#define BODYFORCE_USE_CPU 0
-#define INTEGRATEPOSITIONS_USE_CPU 0
+#ifndef USE_MPI
+#define USE_MPI 0
+#endif
+
+#ifndef OPENMP_OFFLOAD
+#define OPENMP_OFFLOAD 0
+#endif
+
+#if USE_MPI
+#include <mpi.h>
+#endif
 
 extern void bodyForce_cpu(
     Pos *global_pos, Vel *local_vel, int local_start, int local_n, int n);
-extern void bodyForce_gpu(Pos *global_pos, Vel *local_vel, int local_start, int local_n, int n);
+extern void bodyForce_gpu(
+    Pos *global_pos, Vel *local_vel, int local_start, int local_n, int n);
 extern void integratePositions_cpu(Pos *local_pos, Vel *local_vel, int local_n);
 extern void integratePositions_gpu(Pos *local_pos, Vel *local_vel, int local_n);
 
-static void require_offload(int rank) {
+typedef void (*bodyforce_fn)(Pos *, Vel *, int, int, int);
+typedef void (*integrate_fn)(Pos *, Vel *, int);
+
+#if OPENMP_OFFLOAD
+static void require_offload(int use_mpi, int rank) {
     int offload_ok = 0;
 #pragma omp target map(tofrom : offload_ok)
     { offload_ok = !omp_is_initial_device(); }
@@ -28,57 +43,118 @@ static void require_offload(int rank) {
                     "Ensure libomptarget CUDA plugin is available and rebuild "
                     "with the correct GPU_ARCH (e.g. make GPU_ARCH=sm_75).\n");
         }
-        MPI_Abort(MPI_COMM_WORLD, 1);
+#if USE_MPI
+        if (use_mpi) {
+            MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+#endif
+        exit(1);
     }
 }
+#endif
 
-void bodyForce_mpi(
-    Pos *global_pos, Vel *local_vel, int local_start, int local_n, int n) {
-#if (BODYFORCE_USE_CPU == 1)
-#pragma omp task
-    bodyForce_cpu(global_pos, local_vel, local_start, local_n, n);
+static void init_bodies(Pos *pos, Vel *vel, int nBodies) {
+#ifdef DEBUG
+    char initialized_pos[PATH_MAX];
+    char initialized_vel[PATH_MAX];
+    make_debug_path(initialized_pos, sizeof(initialized_pos), "initialized_pos_12");
+    make_debug_path(initialized_vel, sizeof(initialized_vel), "initialized_vel_12");
+    read_values_from_file(initialized_pos, pos, sizeof(Pos), nBodies);
+    read_values_from_file(initialized_vel, vel, sizeof(Vel), nBodies);
 #else
-#pragma omp task
-    bodyForce_gpu(global_pos, local_vel, local_start, local_n, n);
+    for (int i = 0; i < nBodies; i++) {
+        pos[i].x = ((float)rand() / (float)RAND_MAX) * 100.0f;
+        pos[i].y = ((float)rand() / (float)RAND_MAX) * 100.0f;
+        pos[i].z = ((float)rand() / (float)RAND_MAX) * 100.0f;
+        vel[i].vx = ((float)rand() / (float)RAND_MAX) * 10.0f;
+        vel[i].vy = ((float)rand() / (float)RAND_MAX) * 10.0f;
+        vel[i].vz = ((float)rand() / (float)RAND_MAX) * 10.0f;
+    }
 #endif
 }
 
-void integratePositions_mpi(Pos *local_pos, Vel *local_vel, int local_n) {
-#if (INTEGRATEPOSITIONS_USE_CPU == 1)
-#pragma omp task
-    integratePositions_cpu(local_pos, local_vel, local_n);
+static void write_debug_outputs(Pos *pos, Vel *vel, int nBodies) {
+#ifdef DEBUG
+    char computed_pos[PATH_MAX];
+    char computed_vel[PATH_MAX];
+    make_debug_path(computed_pos, sizeof(computed_pos), "computed_pos_12");
+    make_debug_path(computed_vel, sizeof(computed_vel), "computed_vel_12");
+    write_values_to_file(computed_pos, pos, sizeof(Pos), nBodies);
+    write_values_to_file(computed_vel, vel, sizeof(Vel), nBodies);
 #else
-#pragma omp task
-    integratePositions_gpu(local_pos, local_vel, local_n);
+    (void)pos;
+    (void)vel;
+    (void)nBodies;
 #endif
 }
 
-int main(int argc, char **argv) {
-    int nBodies = 2 << 12;
-    int rank, size;
-    double start;
+static int run_single(const options_t *opts, bodyforce_fn bodyforce,
+                      integrate_fn integrate) {
+    int nBodies = opts->nBodies;
 
 #ifdef DEBUG
-    const char *initialized_pos = "../debug/initialized_pos_12";
-    const char *initialized_vel = "../debug/initialized_vel_12";
-    const char *computed_pos = "../debug/computed_pos_12";
-    const char *computed_vel = "../debug/computed_vel_12";
-#endif
-
-#ifndef DEBUG
-    if (argc > 1)
-        nBodies = 2 << (atoi(argv[1]) - 1);
-#else
-    (void)argc;
-    (void)argv;
+    nBodies = 2 << 12;
     printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
 #endif
 
-    // MPI initialization
+    Pos *pos = (Pos *)(malloc(sizeof(Pos) * nBodies));
+    Vel *vel = (Vel *)(malloc(sizeof(Vel) * nBodies));
+    if (!pos || !vel) {
+        fprintf(stderr, "ERROR: failed to allocate bodies\n");
+        free(pos);
+        free(vel);
+        return 1;
+    }
+
+    init_bodies(pos, vel, nBodies);
+
+    const int nIters = 10;
+    double start = omp_get_wtime();
+
+#if OPENMP_OFFLOAD
+    if (mode_uses_gpu(opts->mode)) {
+        require_offload(0, 0);
+    }
+#endif
+
+    for (int iter = 0; iter < nIters; iter++) {
+#pragma omp task
+        bodyforce(pos, vel, 0, nBodies, nBodies);
+#pragma omp task
+        integrate(pos, vel, nBodies);
+    }
+    printf("%lf\n", omp_get_wtime() - start);
+
+    write_debug_outputs(pos, vel, nBodies);
+
+    free(pos);
+    free(vel);
+    return 0;
+}
+
+#if USE_MPI
+static int run_mpi(const options_t *opts, bodyforce_fn bodyforce,
+                   integrate_fn integrate, int argc, char **argv) {
+    int nBodies = opts->nBodies;
+    int rank, size;
+    double start = 0.0;
+
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-    require_offload(rank);
+
+#ifdef DEBUG
+    nBodies = 2 << 12;
+    if (rank == 0) {
+        printf("WARNING: Running on debug mode. Fixing nbodies to 2 << 12\n");
+    }
+#endif
+
+#if OPENMP_OFFLOAD
+    if (mode_uses_gpu(opts->mode)) {
+        require_offload(1, rank);
+    }
+#endif
 
     int base = nBodies / size;
     int rem = nBodies % size;
@@ -102,10 +178,12 @@ int main(int argc, char **argv) {
         global_pos = (Pos *)(malloc(sizeof(Pos) * nBodies));
         global_vel = (Vel *)(malloc(sizeof(Vel) * nBodies));
 #ifdef DEBUG
-        read_values_from_file(
-            initialized_pos, global_pos, sizeof(Pos), nBodies);
-        read_values_from_file(
-            initialized_vel, global_vel, sizeof(Vel), nBodies);
+        char initialized_pos[PATH_MAX];
+        char initialized_vel[PATH_MAX];
+        make_debug_path(initialized_pos, sizeof(initialized_pos), "initialized_pos_12");
+        make_debug_path(initialized_vel, sizeof(initialized_vel), "initialized_vel_12");
+        read_values_from_file(initialized_pos, global_pos, sizeof(Pos), nBodies);
+        read_values_from_file(initialized_vel, global_vel, sizeof(Vel), nBodies);
 #else
         for (int i = 0; i < nBodies; i++) {
             global_pos[i].x = ((float)rand() / (float)RAND_MAX) * 100.0f;
@@ -120,6 +198,18 @@ int main(int argc, char **argv) {
 
     Pos *local_pos = malloc(sizeof(Pos) * local_n);
     Vel *local_vel = malloc(sizeof(Vel) * local_n);
+    if (!local_pos || !local_vel) {
+        fprintf(stderr, "ERROR: failed to allocate local buffers\n");
+        free(local_pos);
+        free(local_vel);
+        free(global_pos);
+        if (rank == 0) {
+            free(global_vel);
+        }
+        free(sendCounts);
+        free(displs);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
 
     MPI_Datatype MPI_Pos, MPI_Vel;
     MPI_Type_contiguous(3, MPI_FLOAT, &MPI_Pos); // Assuming Pos is 3 floats
@@ -148,11 +238,11 @@ int main(int argc, char **argv) {
     memcpy(local_pos, global_pos + local_start, sizeof(Pos) * local_n);
 
     const int nIters = 10;
-
-
     for (int iter = 0; iter < nIters; iter++) {
-        bodyForce_mpi(global_pos, local_vel, local_start, local_n, nBodies);
-        integratePositions_mpi(local_pos, local_vel, local_n);
+        #pragma omp task
+        bodyforce(global_pos, local_vel, local_start, local_n, nBodies);
+        #pragma omp task
+        integrate(local_pos, local_vel, local_n);
         MPI_Allgatherv(local_pos,
                        local_n,
                        MPI_Pos,
@@ -175,13 +265,9 @@ int main(int argc, char **argv) {
     if (rank == 0)
         printf("%lf\n", omp_get_wtime() - start); // seconds
 
-
-#ifdef DEBUG
     if (rank == 0) {
-        write_values_to_file(computed_pos, global_pos, sizeof(Pos), nBodies);
-        write_values_to_file(computed_vel, global_vel, sizeof(Vel), nBodies);
+        write_debug_outputs(global_pos, global_vel, nBodies);
     }
-#endif
 
     free(local_pos);
     free(local_vel);
@@ -191,4 +277,50 @@ int main(int argc, char **argv) {
     free(sendCounts);
     free(displs);
     MPI_Finalize();
+    return 0;
+}
+#endif
+
+int main(int argc, char **argv) {
+    init_debug_paths(argv[0]);
+
+    options_t opts = {
+        .nBodies = 2 << 12,
+        .mode = MODE_CPU,
+        .backend = BACKEND_SINGLE,
+        .show_help = 0,
+        .backend_set = 0,
+        .mode_set = 0,
+    };
+
+    if (parse_options(argc, argv, &opts) != 0 || opts.show_help) {
+        print_usage(argv[0]);
+        return opts.show_help ? 0 : 1;
+    }
+
+    if (mode_uses_gpu(opts.mode) && !OPENMP_OFFLOAD) {
+        fprintf(stderr, "ERROR: GPU/Hybrid mode requires OPENMP offload build.\n");
+        return 1;
+    }
+
+    bodyforce_fn bodyforce = bodyForce_cpu;
+    integrate_fn integrate = integratePositions_cpu;
+    if (opts.mode == MODE_GPU) {
+        bodyforce = bodyForce_gpu;
+        integrate = integratePositions_gpu;
+    } else if (opts.mode == MODE_HYBRID) {
+        bodyforce = bodyForce_gpu;
+        integrate = integratePositions_cpu;
+    }
+
+    if (opts.backend == BACKEND_MPI) {
+#if USE_MPI
+        return run_mpi(&opts, bodyforce, integrate, argc, argv);
+#else
+        fprintf(stderr, "ERROR: MPI backend requested but binary built without MPI.\n");
+        return 1;
+#endif
+    }
+
+    return run_single(&opts, bodyforce, integrate);
 }
