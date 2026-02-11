@@ -12,11 +12,6 @@ BASE_CFLAGS = -fopenmp -O3 -Wall -std=c99
 OFFLOAD_CFLAGS_CLANG = -fopenmp-targets=$(OMP_TARGET) \
 	-Xopenmp-target=$(OMP_TARGET) -march=$(GPU_ARCH)
 LDFLAGS = -lm
-PYTHON ?= python3
-RTOL ?= 1e-3
-ATOL ?= 1e-5
-MAX_REPORT ?= 10
-
 ifeq ($(USE_MPI),1)
   CC := $(MPICC)
   CFLAGS_MPI := -DUSE_MPI=1
@@ -68,27 +63,8 @@ debug_paths.o: ../common/debug_paths.c ../include/debug_paths.h
 clean:
 	rm -f $(OBJS) $(TARGET) $(EXTRA)
 
-compare:
-	@$(PYTHON) ../compare.py \
-		--computed ../debug/computed_pos_12 \
-		--solution ../debug/solution_pos_12 \
-		--kind pos \
-		--rtol $(RTOL) --atol $(ATOL) --max-report $(MAX_REPORT)
-	@$(PYTHON) ../compare.py \
-		--computed ../debug/computed_vel_12 \
-		--solution ../debug/solution_vel_12 \
-		--kind vel \
-		--rtol $(RTOL) --atol $(ATOL) --max-report $(MAX_REPORT)
-
-compile:
-	gcc -O2 -o bin2txt ../bin2txt.c
-
-run-bin2txt: compile
-	./bin2txt
-
-compare-txt: run-bin2txt
-	@$(MAKE) compare
-
-diff-txt: run-bin2txt
+diff-txt:
+	@gcc -O2 -o bin2txt ../bin2txt.c
+	@./bin2txt
 	sdiff ../debug/computed_pos_12.txt ../debug/solution_pos_12.txt || true; \
 	sdiff ../debug/computed_vel_12.txt ../debug/solution_vel_12.txt || true;

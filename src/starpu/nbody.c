@@ -34,6 +34,18 @@
 #define USE_MPI 0
 #endif
 
+#ifndef NBODY_USE_CUDA
+#ifdef STARPU_USE_CUDA
+#define NBODY_USE_CUDA 1
+#else
+#define NBODY_USE_CUDA 0
+#endif
+#endif
+
+#if NBODY_USE_CUDA && !defined(STARPU_USE_CUDA)
+#error "NBODY_USE_CUDA=1 requires a StarPU build with CUDA support."
+#endif
+
 #if USE_MPI
 #include <starpu_mpi.h>
 #endif
@@ -47,7 +59,7 @@
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);
-#ifdef STARPU_USE_CUDA
+#if NBODY_USE_CUDA
 extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cuda(void *buffers[], void *_args);
 #endif
@@ -65,9 +77,10 @@ static int configure_codelets(compute_mode_t mode,
     memset(bodyforce_cl, 0, sizeof(*bodyforce_cl));
     memset(integrate_cl, 0, sizeof(*integrate_cl));
 
-    bodyforce_cl->nbuffers = 2;
+    bodyforce_cl->nbuffers = 3;
     bodyforce_cl->modes[0] = STARPU_R;
-    bodyforce_cl->modes[1] = STARPU_RW;
+    bodyforce_cl->modes[1] = STARPU_R;
+    bodyforce_cl->modes[2] = STARPU_RW;
     bodyforce_cl->model = &bodyforce_perfmodel;
 
     integrate_cl->nbuffers = 2;
@@ -83,7 +96,7 @@ static int configure_codelets(compute_mode_t mode,
         return 0;
     }
 
-#ifdef STARPU_USE_CUDA
+#if NBODY_USE_CUDA
     if (mode == MODE_GPU) {
         bodyforce_cl->cuda_funcs[0] = bodyForce_cuda;
         integrate_cl->cuda_funcs[0] = integratePositions_cuda;
@@ -199,6 +212,8 @@ static int run_single(const options_t *opts,
             ret = starpu_task_insert(bodyforce_cl,
                                      STARPU_R,
                                      pos_handle,
+                                     STARPU_R,
+                                     pos_handles[j],
                                      STARPU_RW,
                                      vel_handles[j],
                                      0);
@@ -317,6 +332,8 @@ static int run_mpi(const options_t *opts,
                                          bodyforce_cl,
                                          STARPU_R,
                                          pos_handle,
+                                         STARPU_R,
+                                         pos_handles[j],
                                          STARPU_RW,
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
@@ -388,7 +405,7 @@ int main(int argc, char **argv) {
     }
 
     if (mode_uses_gpu(opts.mode)) {
-#ifndef STARPU_USE_CUDA
+#if !NBODY_USE_CUDA
         fprintf(stderr, "ERROR: GPU/Hybrid mode requires StarPU with CUDA.\n");
         return 1;
 #endif

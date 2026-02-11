@@ -90,7 +90,7 @@ void print_usage(const char *prog) {
             "\n"
             "Options:\n"
             "  -n, --n <count>         Number of bodies (absolute value)\n"
-            "  --exp <e>               Legacy exponent (nBodies = 2^e)\n"
+            "  --exp <e>               Legacy exponent (nBodies = 2 << e)\n"
             "  -b, --backend <type>    Backend: mpi or single\n"
             "  --mpi                   Shorthand for --backend mpi\n"
             "  --single                Shorthand for --backend single\n"
@@ -99,7 +99,7 @@ void print_usage(const char *prog) {
             "\n"
             "Legacy:\n"
             "  If a positional numeric argument is provided, it is treated as\n"
-            "  an exponent (nBodies = 2^exp) for backward compatibility.\n",
+            "  an exponent (nBodies = 2 << exp) for backward compatibility.\n",
             prog);
 }
 
@@ -160,10 +160,10 @@ int parse_options(int argc, char **argv, options_t *opts) {
     if (n_direct > 0) {
         opts->nBodies = n_direct;
     } else if (exp > 0) {
-        if (exp >= (int)(sizeof(int) * 8 - 1)) {
+        if (exp >= (int)(sizeof(int) * 8 - 2)) {
             return -1;
         }
-        opts->nBodies = 1 << exp;
+        opts->nBodies = 1 << (exp + 1);
     }
 
     if (!opts->backend_set) {

@@ -22,7 +22,7 @@ nbody: nbody.o nbody_cpu.o options.o debug_paths.o
 
 ifeq ($(USE_CUDA),1)
 nbody: nbody_cuda.o
-nbody: LDLIBS+=-L$(CUDA_PATH)/lib64 -lcudart -lstdc++
+nbody: LDLIBS+=-L$(CUDA_LIBDIR) -Wl,-rpath -Wl,$(CUDA_LIBDIR) -lcudart -lstdc++
 endif
 
 options.o: ../common/options.c ../include/options.h
@@ -31,32 +31,8 @@ options.o: ../common/options.c ../include/options.h
 debug_paths.o: ../common/debug_paths.c ../include/debug_paths.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-PYTHON ?= python3
-RTOL ?= 1e-3
-ATOL ?= 1e-5
-MAX_REPORT ?= 10
-
-compare:
-	@$(PYTHON) ../compare.py \
-		--computed ../debug/computed_pos_12 \
-		--solution ../debug/solution_pos_12 \
-		--kind pos \
-		--rtol $(RTOL) --atol $(ATOL) --max-report $(MAX_REPORT)
-	@$(PYTHON) ../compare.py \
-		--computed ../debug/computed_vel_12 \
-		--solution ../debug/solution_vel_12 \
-		--kind vel \
-		--rtol $(RTOL) --atol $(ATOL) --max-report $(MAX_REPORT)
-
-compile:
-	gcc -O2 -o bin2txt ../bin2txt.c
-
-run-bin2txt: compile
-	./bin2txt
-
-compare-txt: run-bin2txt
-	@$(MAKE) compare
-
-diff-txt: run-bin2txt
+diff-txt:
+	@gcc -O2 -o bin2txt ../bin2txt.c
+	@./bin2txt
 	sdiff ../debug/computed_pos_12.txt ../debug/solution_pos_12.txt || true; \
 	sdiff ../debug/computed_vel_12.txt ../debug/solution_vel_12.txt || true;

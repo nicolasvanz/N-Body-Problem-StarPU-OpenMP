@@ -2,7 +2,9 @@ STARPU_VERSION ?= 1.4
 USE_MPI ?= 1
 DEBUG ?= 0
 
-NVCC = nvcc
+NVCC ?= nvcc
+CUDA_PATH ?= $(shell sh -c 'nvcc_path=$$(command -v $(NVCC) 2>/dev/null); if [ -n "$$nvcc_path" ]; then dirname "$$(dirname "$$nvcc_path")"; else echo /usr/local/cuda; fi')
+CUDA_LIBDIR ?= $(if $(wildcard $(CUDA_PATH)/lib64/libcudart.so*),$(CUDA_PATH)/lib64,$(CUDA_PATH)/lib)
 
 ifeq ($(USE_MPI),1)
   CC = mpicc
@@ -27,8 +29,10 @@ endif
 
 ifeq ($(USE_CUDA),1)
   CFLAGS += -DOPTIONS_DEFAULT_MODE=MODE_GPU
+  CFLAGS += -DNBODY_USE_CUDA=1
 else
   CFLAGS += -DOPTIONS_DEFAULT_MODE=MODE_CPU
+  CFLAGS += -DNBODY_USE_CUDA=0
 endif
 
 # to avoid having to use LD_LIBRARY_PATH

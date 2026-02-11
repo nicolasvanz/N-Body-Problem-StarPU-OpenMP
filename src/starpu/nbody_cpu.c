@@ -41,14 +41,12 @@ void bodyForce_cpu(void *buffers[], void *_args) {
 
     /* length of the vector */
     unsigned int nPos = STARPU_VECTOR_GET_NX(buffers[0]);
-    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[1]);
+    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[2]);
 
     /* local copy of the vector pointer */
-    Pos *p = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
-    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[1]);
-
-    /* extract the value arguments */
-    unsigned int offset = STARPU_VECTOR_GET_OFFSET(buffers[1]) / sizeof(Vel);
+    Pos *global_pos = (Pos *)STARPU_VECTOR_GET_PTR(buffers[0]);
+    Pos *local_pos = (Pos *)STARPU_VECTOR_GET_PTR(buffers[1]);
+    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[2]);
 
     for (unsigned i = 0; i < nVel; i++) {
         float Fx = 0.0f;
@@ -56,9 +54,9 @@ void bodyForce_cpu(void *buffers[], void *_args) {
         float Fz = 0.0f;
 
         for (unsigned j = 0; j < nPos; j++) {
-            float dx = p[j].x - p[i + offset].x;
-            float dy = p[j].y - p[i + offset].y;
-            float dz = p[j].z - p[i + offset].z;
+            float dx = global_pos[j].x - local_pos[i].x;
+            float dy = global_pos[j].y - local_pos[i].y;
+            float dz = global_pos[j].z - local_pos[i].z;
             float distSqr = dx * dx + dy * dy + dz * dz + SOFTENING;
             float invDist = my_rsqrtf(distSqr);
             float invDist3 = invDist * invDist * invDist;
