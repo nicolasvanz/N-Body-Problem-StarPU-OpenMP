@@ -95,6 +95,9 @@ void print_usage(const char *prog) {
             "  --mpi                   Shorthand for --backend mpi\n"
             "  --single                Shorthand for --backend single\n"
             "  -m, --mode <mode>       Mode: cpu, gpu, or hybrid\n"
+            "  --cpu                   Shorthand for --mode cpu\n"
+            "  --gpu                   Shorthand for --mode gpu\n"
+            "  --hybrid                Shorthand for --mode hybrid\n"
             "  -h, --help              Show this help\n"
             "\n"
             "Legacy:\n"
@@ -146,6 +149,21 @@ int parse_options(int argc, char **argv, options_t *opts) {
             if (i + 1 >= argc || !parse_mode(argv[++i], &opts->mode)) {
                 return -1;
             }
+            opts->mode_set = 1;
+            continue;
+        }
+        if (strcmp(arg, "--cpu") == 0) {
+            opts->mode = MODE_CPU;
+            opts->mode_set = 1;
+            continue;
+        }
+        if (strcmp(arg, "--gpu") == 0) {
+            opts->mode = MODE_GPU;
+            opts->mode_set = 1;
+            continue;
+        }
+        if (strcmp(arg, "--hybrid") == 0) {
+            opts->mode = MODE_HYBRID;
             opts->mode_set = 1;
             continue;
         }
