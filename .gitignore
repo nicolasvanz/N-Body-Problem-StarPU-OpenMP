@@ -57,3 +57,5 @@ bin2txt
 *computed_vel*
 *.txt
 venv
+
+starpu.pdf
