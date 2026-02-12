@@ -70,6 +70,52 @@ static struct starpu_perfmodel bodyforce_perfmodel = {
 static struct starpu_perfmodel integratepositions_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "integratepositions"};
 
+static void nbody_vector_filter_block(void *parent_interface,
+                                      void *child_interface,
+                                      struct starpu_data_filter *f,
+                                      unsigned id,
+                                      unsigned nchunks) {
+    (void)f;
+
+    struct starpu_vector_interface *vector_parent =
+        (struct starpu_vector_interface *)parent_interface;
+    struct starpu_vector_interface *vector_child =
+        (struct starpu_vector_interface *)child_interface;
+
+    unsigned child_nx = 0;
+    size_t child_offset = 0;
+    starpu_filter_nparts_compute_chunk_size_and_offset(
+        (unsigned)vector_parent->nx,
+        nchunks,
+        vector_parent->elemsize,
+        id,
+        1,
+        &child_nx,
+        &child_offset);
+
+    vector_child->id = vector_parent->id;
+    vector_child->nx = child_nx;
+    vector_child->elemsize = vector_parent->elemsize;
+    vector_child->allocsize = child_nx * vector_parent->elemsize;
+    /*
+        currently starpu uses slice_base for openmp handling. as we don't use
+        starpu + openmp, we use slice_base as a offset variable that is 
+        reliable for mpi environments. STARPU_VECTOR_GET_OFFSET seems to be
+        unstable at mpi environments: apparently we can lose offset information
+        when distributing or gathering subvectors to/from other nodes
+    */
+    vector_child->slice_base =
+        vector_parent->slice_base + child_offset / vector_parent->elemsize;
+
+    if (vector_parent->dev_handle) {
+        if (vector_parent->ptr) {
+            vector_child->ptr = vector_parent->ptr + child_offset;
+        }
+        vector_child->dev_handle = vector_parent->dev_handle;
+        vector_child->offset = vector_parent->offset + child_offset;
+    }
+}
+
 
 static int configure_codelets(compute_mode_t mode,
                               struct starpu_codelet *bodyforce_cl,
@@ -77,10 +123,9 @@ static int configure_codelets(compute_mode_t mode,
     memset(bodyforce_cl, 0, sizeof(*bodyforce_cl));
     memset(integrate_cl, 0, sizeof(*integrate_cl));
 
-    bodyforce_cl->nbuffers = 3;
+    bodyforce_cl->nbuffers = 2;
     bodyforce_cl->modes[0] = STARPU_R;
-    bodyforce_cl->modes[1] = STARPU_R;
-    bodyforce_cl->modes[2] = STARPU_RW;
+    bodyforce_cl->modes[1] = STARPU_RW;
     bodyforce_cl->model = &bodyforce_perfmodel;
 
     integrate_cl->nbuffers = 2;
@@ -200,24 +245,26 @@ static int run_single(const options_t *opts,
         sizeof(starpu_data_handle_t) * nPartitions);
 
     struct starpu_data_filter filter = {
-        .filter_func = starpu_vector_filter_block, .nchildren = nPartitions};
+        .filter_func = nbody_vector_filter_block, .nchildren = nPartitions};
     starpu_data_partition_plan(pos_handle, &filter, pos_handles);
     starpu_data_partition_plan(vel_handle, &filter, vel_handles);
+    starpu_data_partition_submit(vel_handle, nPartitions, vel_handles);
 
     const int nIters = 10;
     double start = starpu_timing_now();
 
     for (int i = 0; i < nIters; i++) {
+        starpu_data_partition_submit(pos_handle, nPartitions, pos_handles);
+
         for (int j = 0; j < nPartitions; j++) {
             ret = starpu_task_insert(bodyforce_cl,
                                      STARPU_R,
                                      pos_handle,
-                                     STARPU_R,
-                                     pos_handles[j],
                                      STARPU_RW,
                                      vel_handles[j],
                                      0);
         }
+        starpu_task_wait_for_all();
 
         for (int j = 0; j < nPartitions; j++) {
             ret = starpu_task_insert(integrate_cl,
@@ -227,11 +274,14 @@ static int run_single(const options_t *opts,
                                      vel_handles[j],
                                      0);
         }
+        starpu_task_wait_for_all();
+
+        starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
+        starpu_task_wait_for_all();
     }
-    starpu_task_wait_for_all();
 
     starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
-    starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
+    starpu_task_wait_for_all();
     starpu_data_partition_clean(pos_handle, nPartitions, pos_handles);
     starpu_data_partition_clean(vel_handle, nPartitions, vel_handles);
 
@@ -277,6 +327,7 @@ static int run_mpi(const options_t *opts,
     conf.sched_policy_name = "dmda";
 
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
+    starpu_mpi_cache_set(0);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
 
@@ -315,7 +366,7 @@ static int run_mpi(const options_t *opts,
     starpu_mpi_data_register(vel_handle, tag++, 0);
 
     struct starpu_data_filter filter = {
-        .filter_func = starpu_vector_filter_block, .nchildren = nPartitions};
+        .filter_func = nbody_vector_filter_block, .nchildren = nPartitions};
     starpu_data_partition_plan(pos_handle, &filter, pos_handles);
     starpu_data_partition_plan(vel_handle, &filter, vel_handles);
     for (int i = 0; i < nPartitions; i++) {
@@ -332,8 +383,6 @@ static int run_mpi(const options_t *opts,
                                          bodyforce_cl,
                                          STARPU_R,
                                          pos_handle,
-                                         STARPU_R,
-                                         pos_handles[j],
                                          STARPU_RW,
                                          vel_handles[j],
                                          STARPU_EXECUTE_ON_NODE,
@@ -353,12 +402,14 @@ static int run_mpi(const options_t *opts,
                                          0);
         }
     }
-    starpu_task_wait_for_all();
 
     starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
     starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
     starpu_data_partition_clean(pos_handle, nPartitions, pos_handles);
     starpu_data_partition_clean(vel_handle, nPartitions, vel_handles);
+
+    starpu_mpi_get_data_on_node(MPI_COMM_WORLD, pos_handle, 0);
+    starpu_mpi_get_data_on_node(MPI_COMM_WORLD, vel_handle, 0);
 
     if (rank == 0) {
         starpu_data_acquire(pos_handle, STARPU_R);
