@@ -2,7 +2,7 @@
 USE_MPI ?= 1
 MPI_CC ?= clang
 MPICC ?= OMPI_CC=$(MPI_CC) mpicc
-CC ?= clang
+CC = clang
 OFFLOAD ?= 1
 OMP_TARGET ?= nvptx64
 GPU_ARCH ?= sm_80
@@ -25,7 +25,7 @@ COMPILER_ID := $(shell $(CC) --version 2>/dev/null | head -1)
 ifeq ($(OFFLOAD),1)
   CFLAGS += $(OFFLOAD_CFLAGS_CLANG) -DOPENMP_OFFLOAD=1
   ifeq (,$(findstring clang,$(COMPILER_ID)))
-    $(error OpenMP offload requires a clang-based compiler. Try: USE_MPI=1 OMPI_CC=clang make -C src/openmp)
+    $(error OpenMP offload requires a clang-based compiler. Try: USE_MPI=0 CC=clang or USE_MPI=1 OMPI_CC=clang make -C src/openmp)
   endif
   CFLAGS += -DOPTIONS_DEFAULT_MODE=MODE_GPU
 else
