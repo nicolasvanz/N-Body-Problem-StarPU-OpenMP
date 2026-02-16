@@ -286,11 +286,13 @@ int main(int argc, char **argv) {
 
     options_t opts = {
         .nBodies = 2 << 12,
+        .nPartitions = 0,
         .mode = MODE_CPU,
         .backend = BACKEND_SINGLE,
         .show_help = 0,
         .backend_set = 0,
         .mode_set = 0,
+        .partitions_set = 0,
     };
 
     if (parse_options(argc, argv, &opts) != 0 || opts.show_help) {

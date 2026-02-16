@@ -221,7 +221,15 @@ static int run_single(const options_t *opts,
 
     starpu_init(&conf);
 
-    int nPartitions = 4 * starpu_worker_get_count();
+    int nPartitions = opts->partitions_set ? opts->nPartitions : starpu_worker_get_count();
+    if (nPartitions <= 0 || nPartitions > nBodies) {
+        fprintf(stderr,
+                "ERROR: invalid partition count %d (valid range: 1..%d)\n",
+                nPartitions,
+                nBodies);
+        starpu_shutdown();
+        return 1;
+    }
 
     starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
     starpu_malloc((void **)&vel, sizeof(Vel) * nBodies);
@@ -338,7 +346,17 @@ static int run_mpi(const options_t *opts,
     }
 #endif
 
-    nPartitions = size * starpu_worker_get_count();
+    nPartitions = opts->partitions_set ? opts->nPartitions : size * starpu_worker_get_count();
+    if (nPartitions <= 0 || nPartitions > nBodies) {
+        if (rank == 0) {
+            fprintf(stderr,
+                    "ERROR: invalid partition count %d (valid range: 1..%d)\n",
+                    nPartitions,
+                    nBodies);
+        }
+        starpu_mpi_shutdown();
+        return 1;
+    }
 
     if (rank == 0) {
         starpu_malloc((void **)&pos, sizeof(Pos) * nBodies);
@@ -443,11 +461,13 @@ int main(int argc, char **argv) {
 
     options_t opts = {
         .nBodies = 2 << 12,
+        .nPartitions = 0,
         .mode = MODE_CPU,
         .backend = BACKEND_SINGLE,
         .show_help = 0,
         .backend_set = 0,
         .mode_set = 0,
+        .partitions_set = 0,
     };
 
     if (parse_options(argc, argv, &opts) != 0 || opts.show_help) {

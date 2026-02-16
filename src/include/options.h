@@ -14,11 +14,13 @@ typedef enum {
 
 typedef struct {
     int nBodies;
+    int nPartitions;
     compute_mode_t mode;
     backend_t backend;
     int show_help;
     int backend_set;
     int mode_set;
+    int partitions_set;
 } options_t;
 
 void print_usage(const char *prog);

@@ -90,6 +90,7 @@ void print_usage(const char *prog) {
             "\n"
             "Options:\n"
             "  -n, --n <count>         Number of bodies (absolute value)\n"
+            "  -p, --parts <count>     Number of StarPU partitions\n"
             "  --exp <e>               Legacy exponent (nBodies = 2 << e)\n"
             "  -b, --backend <type>    Backend: mpi or single\n"
             "  --mpi                   Shorthand for --backend mpi\n"
@@ -108,6 +109,7 @@ void print_usage(const char *prog) {
 
 int parse_options(int argc, char **argv, options_t *opts) {
     int n_direct = -1;
+    int p_direct = -1;
     int exp = -1;
 
     for (int i = 1; i < argc; i++) {
@@ -118,6 +120,12 @@ int parse_options(int argc, char **argv, options_t *opts) {
         }
         if (strcmp(arg, "-n") == 0 || strcmp(arg, "--n") == 0) {
             if (i + 1 >= argc || !parse_int(argv[++i], &n_direct)) {
+                return -1;
+            }
+            continue;
+        }
+        if (strcmp(arg, "-p") == 0 || strcmp(arg, "--parts") == 0) {
+            if (i + 1 >= argc || !parse_int(argv[++i], &p_direct)) {
                 return -1;
             }
             continue;
@@ -182,6 +190,10 @@ int parse_options(int argc, char **argv, options_t *opts) {
             return -1;
         }
         opts->nBodies = 1 << (exp + 1);
+    }
+    if (p_direct > 0) {
+        opts->nPartitions = p_direct;
+        opts->partitions_set = 1;
     }
 
     if (!opts->backend_set) {
