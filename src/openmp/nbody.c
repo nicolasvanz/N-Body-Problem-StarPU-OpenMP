@@ -289,10 +289,12 @@ int main(int argc, char **argv) {
         .nPartitions = 0,
         .mode = MODE_CPU,
         .backend = BACKEND_SINGLE,
+        .algorithm = ALGO_CLASSIC,
         .show_help = 0,
         .backend_set = 0,
         .mode_set = 0,
         .partitions_set = 0,
+        .algorithm_set = 0,
     };
 
     if (parse_options(argc, argv, &opts) != 0 || opts.show_help) {
@@ -302,6 +304,10 @@ int main(int argc, char **argv) {
 
     if (mode_uses_gpu(opts.mode) && !OPENMP_OFFLOAD) {
         fprintf(stderr, "ERROR: GPU/Hybrid mode requires OPENMP offload build.\n");
+        return 1;
+    }
+    if (opts.algorithm == ALGO_TILED) {
+        fprintf(stderr, "ERROR: tiled algorithm is only available in the StarPU backend.\n");
         return 1;
     }
 

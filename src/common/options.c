@@ -54,6 +54,19 @@ static int parse_backend(const char *s, backend_t *backend) {
     return 0;
 }
 
+static int parse_algorithm(const char *s, simulation_algorithm_t *algorithm) {
+    if (strcmp(s, "classic") == 0) {
+        *algorithm = ALGO_CLASSIC;
+        return 1;
+    }
+    if (strcmp(s, "tiled") == 0) {
+        *algorithm = ALGO_TILED;
+        return 1;
+    }
+    return 0;
+}
+
+#if USE_MPI
 static int env_indicates_mpi(void) {
     const char *vars[] = {
         "OMPI_COMM_WORLD_SIZE",
@@ -70,6 +83,7 @@ static int env_indicates_mpi(void) {
     }
     return 0;
 }
+#endif
 
 static compute_mode_t default_mode(void) {
     return OPTIONS_DEFAULT_MODE;
@@ -82,6 +96,10 @@ static backend_t default_backend(void) {
     }
 #endif
     return BACKEND_SINGLE;
+}
+
+static simulation_algorithm_t default_algorithm(void) {
+    return ALGO_CLASSIC;
 }
 
 void print_usage(const char *prog) {
@@ -99,6 +117,9 @@ void print_usage(const char *prog) {
             "  --cpu                   Shorthand for --mode cpu\n"
             "  --gpu                   Shorthand for --mode gpu\n"
             "  --hybrid                Shorthand for --mode hybrid\n"
+            "  -a, --algo <type>       Algorithm: classic or tiled\n"
+            "  --classic               Shorthand for --algo classic\n"
+            "  --tiled                 Shorthand for --algo tiled\n"
             "  -h, --help              Show this help\n"
             "\n"
             "Legacy:\n"
@@ -160,6 +181,15 @@ int parse_options(int argc, char **argv, options_t *opts) {
             opts->mode_set = 1;
             continue;
         }
+        if (strcmp(arg, "-a") == 0 || strcmp(arg, "--algo") == 0 ||
+            strcmp(arg, "--algorithm") == 0) {
+            if (i + 1 >= argc ||
+                !parse_algorithm(argv[++i], &opts->algorithm)) {
+                return -1;
+            }
+            opts->algorithm_set = 1;
+            continue;
+        }
         if (strcmp(arg, "--cpu") == 0) {
             opts->mode = MODE_CPU;
             opts->mode_set = 1;
@@ -173,6 +203,16 @@ int parse_options(int argc, char **argv, options_t *opts) {
         if (strcmp(arg, "--hybrid") == 0) {
             opts->mode = MODE_HYBRID;
             opts->mode_set = 1;
+            continue;
+        }
+        if (strcmp(arg, "--classic") == 0) {
+            opts->algorithm = ALGO_CLASSIC;
+            opts->algorithm_set = 1;
+            continue;
+        }
+        if (strcmp(arg, "--tiled") == 0) {
+            opts->algorithm = ALGO_TILED;
+            opts->algorithm_set = 1;
             continue;
         }
         if (arg[0] == '-') {
@@ -201,6 +241,9 @@ int parse_options(int argc, char **argv, options_t *opts) {
     }
     if (!opts->mode_set) {
         opts->mode = default_mode();
+    }
+    if (!opts->algorithm_set) {
+        opts->algorithm = default_algorithm();
     }
 
     return 0;

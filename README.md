@@ -113,6 +113,9 @@ Shared by both backends:
 - `--cpu`: shorthand for `--mode cpu`.
 - `--gpu`: shorthand for `--mode gpu`.
 - `--hybrid`: shorthand for `--mode hybrid`.
+- `-a, --algo <classic|tiled>`: simulation algorithm (default: `classic`).
+- `--classic`: shorthand for `--algo classic`.
+- `--tiled`: shorthand for `--algo tiled`.
 - `-h, --help`: print usage.
 - Positional integer argument (legacy): treated as exponent (`--exp` behavior).
 
@@ -123,6 +126,12 @@ Default behavior:
   - OpenMP: GPU if `OFFLOAD=1`, else CPU.
   - StarPU: GPU if built with CUDA, else CPU.
 - `backend` defaults to MPI only when compiled with MPI support and MPI environment variables are detected; otherwise single-process.
+- `algorithm` defaults to `classic`.
+
+Algorithm notes:
+
+- `classic` is the original two-phase loop (all velocity updates, then position updates).
+- `tiled` is currently implemented only for the StarPU backend in CPU mode (`--cpu`) and works with both `--single` and `--mpi`.
 
 ## Compile Examples
 
