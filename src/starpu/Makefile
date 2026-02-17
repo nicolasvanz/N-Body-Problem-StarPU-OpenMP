@@ -18,12 +18,24 @@ PROGS=nbody
 
 include ./starpu.mk
 
-nbody: nbody.o nbody_cpu.o options.o debug_paths.o
+NBODY_OBJS := nbody.o nbody_single.o nbody_tiled.o nbody_cpu.o options.o debug_paths.o
+ifeq ($(USE_MPI),1)
+NBODY_OBJS += nbody_mpi.o nbody_tiled_mpi.o
+else
+NBODY_OBJS += nbody_mpi_stub.o
+endif
+NBODY_LINK_OBJS := $(NBODY_OBJS)
+
+.PHONY: FORCE
+FORCE:
 
 ifeq ($(USE_CUDA),1)
-nbody: nbody_cuda.o
+NBODY_LINK_OBJS += nbody_cuda.o
 nbody: LDLIBS+=-L$(CUDA_LIBDIR) -Wl,-rpath -Wl,$(CUDA_LIBDIR) -lcudart -lstdc++
 endif
+
+nbody: $(NBODY_LINK_OBJS) FORCE
+	$(CC) $(NBODY_LINK_OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
 options.o: ../common/options.c ../include/options.h
 	$(CC) $(CFLAGS) -c $< -o $@
