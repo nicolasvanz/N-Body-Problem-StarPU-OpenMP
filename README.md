@@ -27,7 +27,7 @@ For OpenMP backend:
 For StarPU backend:
 
 - StarPU development packages (`pkg-config` must find `starpu-<version>`).
-- Optional StarPU MPI package when `USE_MPI=1` (`starpumpi-<version>`).
+- Optional StarPU MPI package when `USE_MPI=1`.
 - Optional CUDA toolkit (`nvcc`) for GPU mode.
 - Optional MPI runtime/compiler when `USE_MPI=1`.
 
@@ -37,21 +37,21 @@ Use the root `Makefile` for most workflows.
 
 - Build selected backend:
 ```bash
-make IMPL=openmp all
-make IMPL=starpu all
+make openmp
+make starpu
 ```
 
 - Run selected backend through the top-level wrapper:
 ```bash
-make run IMPL=openmp ARGS="--single --cpu --n 131072"
-make run IMPL=starpu ARGS="--single --gpu --exp 18"
+make run-openmp ARGS="--single --cpu --n 131072"
+make run-starpu ARGS="--single --gpu --exp 18"
 ```
 
 - Other common targets:
 ```bash
 make clean
-make IMPL=openmp diff-txt
-make IMPL=starpu diff-txt
+make openmp diff-txt
+make starpu diff-txt
 make compare
 ```
 
@@ -117,7 +117,6 @@ Shared by both backends:
 - `--classic`: shorthand for `--algo classic`.
 - `--tiled`: shorthand for `--algo tiled`.
 - `-h, --help`: print usage.
-- Positional integer argument (legacy): treated as exponent (`--exp` behavior).
 
 Default behavior:
 
@@ -181,8 +180,8 @@ make run-starpu ARGS="--single --cpu --n 131072"
 mpirun -np 2 ./src/openmp/nbody --mpi --cpu --exp 18
 mpirun -np 2 ./src/openmp/nbody --mpi --gpu --n 262144
 
-mpirun -np 2 ./src/starpu/nbody --mpi --cpu --exp 18
-mpirun -np 2 ./src/starpu/nbody --mpi --gpu --n 262144
+mpirun --bind-to board -np 2 ./src/starpu/nbody --mpi --cpu --exp 18
+mpirun --bind-to board -np 2 ./src/starpu/nbody --mpi --gpu --n 262144
 ```
 
 ## Debug Output and Result Comparison
