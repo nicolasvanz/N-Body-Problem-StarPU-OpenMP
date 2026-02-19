@@ -130,7 +130,7 @@ Default behavior:
 Algorithm notes:
 
 - `classic` is the original two-phase loop (all velocity updates, then position updates).
-- `tiled` is currently implemented only for the StarPU backend in CPU mode (`--cpu`) and works with both `--single` and `--mpi`.
+- `tiled` is implemented for the StarPU backend and supports `--cpu`, `--gpu`, and `--hybrid` with both `--single` and `--mpi`.
 
 ## Compile Examples
 

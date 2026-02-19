@@ -51,8 +51,12 @@ extern void reduceAcceleration_cpu(void *buffers[], void *_args);
 extern void bodyForce_tile_cpu(void *buffers[], void *_args);
 extern void integratePositions_tiled_cpu(void *buffers[], void *_args);
 #if NBODY_USE_CUDA
+extern void clearAcceleration_cuda(void *buffers[], void *_args);
+extern void reduceAcceleration_cuda(void *buffers[], void *_args);
 extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cuda(void *buffers[], void *_args);
+extern void bodyForce_tile_cuda(void *buffers[], void *_args);
+extern void integratePositions_tiled_cuda(void *buffers[], void *_args);
 #endif
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
@@ -204,45 +208,79 @@ static int configure_tiled_codelets(backend_t backend,
                                     struct starpu_codelet *acc_redux_cl,
                                     struct starpu_codelet *bodyforce_tile_cl,
                                     struct starpu_codelet *integrate_tiled_cl) {
-    if (mode != MODE_CPU) {
-        return -1;
-    }
-
     memset(acc_init_cl, 0, sizeof(*acc_init_cl));
     memset(acc_redux_cl, 0, sizeof(*acc_redux_cl));
     memset(bodyforce_tile_cl, 0, sizeof(*bodyforce_tile_cl));
     memset(integrate_tiled_cl, 0, sizeof(*integrate_tiled_cl));
 
-    acc_init_cl->cpu_funcs[0] = clearAcceleration_cpu;
     acc_init_cl->nbuffers = 1;
     acc_init_cl->modes[0] = STARPU_W;
-    acc_init_cl->where = STARPU_CPU;
 
-    acc_redux_cl->cpu_funcs[0] = reduceAcceleration_cpu;
     acc_redux_cl->nbuffers = 2;
     acc_redux_cl->modes[0] = STARPU_RW | STARPU_COMMUTE;
     acc_redux_cl->modes[1] = STARPU_R;
-    acc_redux_cl->where = STARPU_CPU;
 
-    bodyforce_tile_cl->cpu_funcs[0] = bodyForce_tile_cpu;
     bodyforce_tile_cl->nbuffers = 3;
     bodyforce_tile_cl->modes[0] = STARPU_R;
     bodyforce_tile_cl->modes[1] = STARPU_R;
     bodyforce_tile_cl->modes[2] = (backend == BACKEND_MPI)
                                       ? (STARPU_RW | STARPU_COMMUTE)
                                       : STARPU_REDUX;
-    bodyforce_tile_cl->where = STARPU_CPU;
     bodyforce_tile_cl->model = &bodyforce_tile_perfmodel;
 
-    integrate_tiled_cl->cpu_funcs[0] = integratePositions_tiled_cpu;
     integrate_tiled_cl->nbuffers = 3;
     integrate_tiled_cl->modes[0] = STARPU_RW;
     integrate_tiled_cl->modes[1] = STARPU_RW;
     integrate_tiled_cl->modes[2] = STARPU_R;
-    integrate_tiled_cl->where = STARPU_CPU;
     integrate_tiled_cl->model = &integratepositions_tiled_perfmodel;
 
-    return 0;
+    if (mode == MODE_CPU) {
+        acc_init_cl->cpu_funcs[0] = clearAcceleration_cpu;
+        acc_redux_cl->cpu_funcs[0] = reduceAcceleration_cpu;
+        bodyforce_tile_cl->cpu_funcs[0] = bodyForce_tile_cpu;
+        integrate_tiled_cl->cpu_funcs[0] = integratePositions_tiled_cpu;
+        acc_init_cl->where = STARPU_CPU;
+        acc_redux_cl->where = STARPU_CPU;
+        bodyforce_tile_cl->where = STARPU_CPU;
+        integrate_tiled_cl->where = STARPU_CPU;
+        return 0;
+    }
+
+#if NBODY_USE_CUDA
+    if (mode == MODE_GPU) {
+        acc_init_cl->cuda_funcs[0] = clearAcceleration_cuda;
+        acc_redux_cl->cuda_funcs[0] = reduceAcceleration_cuda;
+        bodyforce_tile_cl->cuda_funcs[0] = bodyForce_tile_cuda;
+        integrate_tiled_cl->cuda_funcs[0] = integratePositions_tiled_cuda;
+        acc_init_cl->where = STARPU_CUDA;
+        acc_redux_cl->where = STARPU_CUDA;
+        bodyforce_tile_cl->where = STARPU_CUDA;
+        integrate_tiled_cl->where = STARPU_CUDA;
+        return 0;
+    }
+
+    if (mode == MODE_HYBRID) {
+        acc_init_cl->cpu_funcs[0] = clearAcceleration_cpu;
+        acc_redux_cl->cpu_funcs[0] = reduceAcceleration_cpu;
+        bodyforce_tile_cl->cpu_funcs[0] = bodyForce_tile_cpu;
+        integrate_tiled_cl->cpu_funcs[0] = integratePositions_tiled_cpu;
+
+        acc_init_cl->cuda_funcs[0] = clearAcceleration_cuda;
+        acc_redux_cl->cuda_funcs[0] = reduceAcceleration_cuda;
+        bodyforce_tile_cl->cuda_funcs[0] = bodyForce_tile_cuda;
+        integrate_tiled_cl->cuda_funcs[0] = integratePositions_tiled_cuda;
+
+        acc_init_cl->where = 0;
+        acc_redux_cl->where = 0;
+        bodyforce_tile_cl->where = 0;
+        integrate_tiled_cl->where = 0;
+        return 0;
+    }
+#else
+    (void)mode;
+#endif
+
+    return -1;
 }
 
 int main(int argc, char **argv) {
@@ -271,11 +309,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "ERROR: GPU/Hybrid mode requires StarPU with CUDA.\n");
         return 1;
 #endif
-    }
-
-    if (opts.algorithm == ALGO_TILED && opts.mode != MODE_CPU) {
-        fprintf(stderr, "ERROR: tiled algorithm currently supports only CPU mode.\n");
-        return 1;
     }
 
     if (opts.algorithm == ALGO_TILED) {
