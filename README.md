@@ -15,6 +15,7 @@ Both backends share the same runtime CLI options (`--n`, `--exp`, `--mode`, `--b
 - `src/common/options.c`: shared command-line parsing.
 - `src/debug`: debug input/reference/output binary files.
 - `src/compare.py`: tolerance-based comparison for debug outputs.
+- `cluster-config`: AMI bake scripts/templates for CPU/CUDA node images.
 
 ## Requirements
 
@@ -241,3 +242,16 @@ make starpu diff-txt
 
 - OpenMP backend prints elapsed time in seconds.
 - StarPU backend prints elapsed time in microseconds.
+
+## AMI Baking (AWS)
+
+Use `cluster-config` to bake reusable CPU/CUDA AMIs:
+
+```bash
+cp cluster-config/ami-bake.env.example cluster-config/ami-bake.env
+# edit cluster-config/ami-bake.env
+./cluster-config/bake-ami.sh --type cpu
+./cluster-config/bake-ami.sh --type cuda
+```
+
+Detailed bake workflow: `cluster-config/README.md`.

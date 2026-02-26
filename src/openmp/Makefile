@@ -24,8 +24,10 @@ COMPILER_ID := $(shell $(CC) --version 2>/dev/null | head -1)
 
 ifeq ($(OFFLOAD),1)
   CFLAGS += $(OFFLOAD_CFLAGS_CLANG) -DOPENMP_OFFLOAD=1
-  ifeq (,$(findstring clang,$(COMPILER_ID)))
-    $(error OpenMP offload requires a clang-based compiler. Try: USE_MPI=0 CC=clang or USE_MPI=1 OMPI_CC=clang make -C src/openmp)
+  ifneq ($(MAKECMDGOALS),clean)
+    ifeq (,$(findstring clang,$(COMPILER_ID)))
+      $(error OpenMP offload requires a clang-based compiler. Try: USE_MPI=0 CC=clang or USE_MPI=1 OMPI_CC=clang make -C src/openmp)
+    endif
   endif
   CFLAGS += -DOPTIONS_DEFAULT_MODE=MODE_GPU
 else
