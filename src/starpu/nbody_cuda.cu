@@ -18,7 +18,7 @@
 
 #include <atomic>
 
-#include "../include/body.h"
+#include "../../include/body.h"
 
 static const unsigned int CUDA_FALLBACK_THREADS_PER_BLOCK = 128U;
 static std::atomic<int> clear_acc_threads(0);

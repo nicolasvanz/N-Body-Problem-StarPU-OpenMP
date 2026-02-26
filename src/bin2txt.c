@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "include/body.h"
+#include "../include/body.h"
 
 #define NFILES 4
 

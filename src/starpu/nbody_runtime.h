@@ -7,8 +7,8 @@
 #define USE_MPI 0
 #endif
 
-#include "../include/body.h"
-#include "../include/options.h"
+#include "../../include/body.h"
+#include "../../include/options.h"
 
 void nbody_vector_filter_block(void *parent_interface,
                                void *child_interface,

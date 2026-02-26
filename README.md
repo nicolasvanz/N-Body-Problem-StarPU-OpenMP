@@ -10,6 +10,7 @@ Both backends share the same runtime CLI options (`--n`, `--exp`, `--mode`, `--b
 ## Repository Layout
 
 - `Makefile`: top-level entrypoint for building/running either backend.
+- `include`: shared headers used by OpenMP and StarPU implementations.
 - `src/openmp`: OpenMP implementation and backend-specific Makefile.
 - `src/starpu`: StarPU implementation and backend-specific Makefile.
 - `src/common/options.c`: shared command-line parsing.

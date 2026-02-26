@@ -37,10 +37,10 @@ endif
 nbody: $(NBODY_LINK_OBJS) FORCE
 	$(CC) $(NBODY_LINK_OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
-options.o: ../common/options.c ../include/options.h
+options.o: ../common/options.c ../../include/options.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-debug_paths.o: ../common/debug_paths.c ../include/debug_paths.h
+debug_paths.o: ../common/debug_paths.c ../../include/debug_paths.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 diff-txt:

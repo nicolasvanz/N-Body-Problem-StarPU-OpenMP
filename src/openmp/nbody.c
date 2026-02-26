@@ -4,10 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../include/body.h"
-#include "../include/debug_paths.h"
-#include "../include/files.h"
-#include "../include/options.h"
+#include "../../include/body.h"
+#include "../../include/debug_paths.h"
+#include "../../include/files.h"
+#include "../../include/options.h"
 
 #ifndef USE_MPI
 #define USE_MPI 0

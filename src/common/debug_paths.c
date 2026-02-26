@@ -2,7 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "../include/debug_paths.h"
+#include "../../include/debug_paths.h"
 
 #include <limits.h>
 #include <stdio.h>

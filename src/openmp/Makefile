@@ -55,10 +55,10 @@ $(TARGET): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-options.o: ../common/options.c ../include/options.h
+options.o: ../common/options.c ../../include/options.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-debug_paths.o: ../common/debug_paths.c ../include/debug_paths.h
+debug_paths.o: ../common/debug_paths.c ../../include/debug_paths.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean up build artifacts

@@ -41,8 +41,8 @@
 
 #include "nbody_runtime.h"
 
-#include "../include/debug_paths.h"
-#include "../include/files.h"
+#include "../../include/debug_paths.h"
+#include "../../include/files.h"
 
 extern void bodyForce_cpu(void *buffers[], void *_args);
 extern void integratePositions_cpu(void *buffers[], void *_args);

@@ -1,4 +1,4 @@
-#include "../include/body.h"
+#include "../../include/body.h"
 #include <math.h>
 #include <omp.h>
 #include <stdio.h>
