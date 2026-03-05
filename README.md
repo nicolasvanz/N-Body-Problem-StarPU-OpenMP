@@ -16,7 +16,7 @@ Both backends share the same runtime CLI options (`--n`, `--exp`, `--mode`, `--b
 - `src/common/options.c`: shared command-line parsing.
 - `src/debug`: debug input/reference/output binary files.
 - `src/compare.py`: tolerance-based comparison for debug outputs.
-- `cluster-config`: AMI bake scripts/templates for CPU/CUDA node images.
+- `cluster-config`: AMI bake scripts/templates and multi-node sync/build/run helper scripts.
 
 ## Requirements
 
@@ -256,3 +256,26 @@ cp cluster-config/ami-bake.env.example cluster-config/ami-bake.env
 ```
 
 Detailed bake workflow: `cluster-config/README.md`.
+
+## Multi-Node Cluster Helper
+
+`cluster-config/cluster-mpi.sh` can:
+- parse IPs from `['ip1','ip2']` or `ip1,ip2`,
+- use separate control IPs (public) and MPI IPs (private),
+- sync the repo to all nodes,
+- build on all nodes,
+- run custom commands on launch host or all nodes,
+- generate an MPI hostfile (`slots=1` by default),
+- run `mpirun` from one selected node (including custom mpirun args, e.g. `--bind-to board`),
+- fetch and condense StarPU FxT traces into local git-ignored `traces/`.
+
+Quick start:
+
+```bash
+cp cluster-config/cluster-mpi.env.example cluster-config/cluster-mpi.env
+./cluster-config/cluster-mpi.sh set-ips "123.123.123.123,111.111.111.111"
+./cluster-config/cluster-mpi.sh all starpu
+```
+
+If you provide only public IPs, the helper can auto-resolve private MPI IPs over SSH
+(`AUTO_RESOLVE_MPI_PRIVATE_IPS=1` in `cluster-mpi.env`).

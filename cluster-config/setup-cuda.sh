@@ -42,7 +42,7 @@ download_tarball() {
 }
 
 install_base_deps() {
-  echo "==> [1/9] Installing base dependencies..."
+  echo "==> [1/10] Installing base dependencies..."
 
   if command -v dnf >/dev/null 2>&1; then
     sudo dnf -y groupinstall "Development Tools" || true
@@ -74,8 +74,49 @@ install_base_deps() {
   fi
 }
 
+ensure_mpi_wrappers_on_path() {
+  echo "==> [2/10] Ensuring MPI wrappers are on PATH..."
+
+  local mpi_bin=""
+  if command -v mpicc >/dev/null 2>&1; then
+    mpi_bin="$(dirname "$(command -v mpicc)")"
+  else
+    for p in /usr/lib64/openmpi/bin /usr/lib/x86_64-linux-gnu/openmpi/bin /usr/local/openmpi/bin; do
+      if [[ -x "${p}/mpicc" ]]; then
+        mpi_bin="${p}"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "${mpi_bin}" ]]; then
+    echo "WARN: mpicc not found after package install; continuing."
+    return 0
+  fi
+
+  export PATH="${mpi_bin}:${PATH}"
+
+  sudo tee /etc/profile.d/openmpi-path.sh >/dev/null <<EOF_INNER
+# Ensure OpenMPI compiler/runtime wrappers are on PATH for all users.
+if [ -d "${mpi_bin}" ]; then
+  case ":\$PATH:" in
+    *:"${mpi_bin}":*) ;;
+    *) export PATH="${mpi_bin}:\$PATH" ;;
+  esac
+fi
+EOF_INNER
+
+  for wrapper in mpicc mpicxx mpic++ mpirun mpiexec; do
+    if [[ -x "${mpi_bin}/${wrapper}" ]]; then
+      sudo ln -sfn "${mpi_bin}/${wrapper}" "/usr/local/bin/${wrapper}"
+    fi
+  done
+
+  echo "OK: MPI wrappers available from ${mpi_bin}"
+}
+
 ensure_cuda_toolkit() {
-  echo "==> [2/9] Checking CUDA toolkit..."
+  echo "==> [3/10] Checking CUDA toolkit..."
 
   if command -v nvcc >/dev/null 2>&1; then
     echo "Found nvcc: $(command -v nvcc)"
@@ -123,7 +164,7 @@ detect_cuda_home() {
 }
 
 install_fxt() {
-  echo "==> [3/9] Building and installing FxT ${FXT_VER}..."
+  echo "==> [4/10] Building and installing FxT ${FXT_VER}..."
   rm -rf "${BUILD_DIR}/fxt-${FXT_VER}" "${BUILD_DIR}/${FXT_TARBALL}"
   mkdir -p "${BUILD_DIR}"
   cd "${BUILD_DIR}"
@@ -137,7 +178,7 @@ install_fxt() {
 }
 
 write_env() {
-  echo "==> [4/9] Writing environment exports to ${ENV_FILE}..."
+  echo "==> [5/10] Writing environment exports to ${ENV_FILE}..."
   sudo tee "${ENV_FILE}" >/dev/null <<EOF_INNER
 # StarPU/FxT/CUDA environment (installed under ${PREFIX})
 export PATH="${PREFIX}/bin:${CUDA_HOME}/bin:\$PATH"
@@ -154,7 +195,7 @@ EOF_INNER
 }
 
 configure_linker() {
-  echo "==> [5/9] Updating dynamic linker cache..."
+  echo "==> [6/10] Updating dynamic linker cache..."
   sudo tee /etc/ld.so.conf.d/starpu-local.conf >/dev/null <<EOF_INNER
 ${PREFIX}/lib
 ${PREFIX}/lib64
@@ -165,12 +206,12 @@ EOF_INNER
 }
 
 prepare_traces() {
-  echo "==> [6/9] Creating trace folders..."
+  echo "==> [7/10] Creating trace folders..."
   mkdir -p "${TRACE_DIR}" "${TRACE_PREFIX}"
 }
 
 build_starpu_cuda() {
-  echo "==> [7/9] Building and installing StarPU ${STARPU_VER} with CUDA..."
+  echo "==> [8/10] Building and installing StarPU ${STARPU_VER} with CUDA..."
   cd "${BUILD_DIR}"
   rm -rf "starpu-${STARPU_VER}" "${STARPU_TARBALL}"
 
@@ -208,7 +249,7 @@ build_starpu_cuda() {
 }
 
 verify() {
-  echo "==> [8/9] Verifying StarPU pkg-config registration..."
+  echo "==> [9/10] Verifying StarPU pkg-config registration..."
 
   if pkg-config --exists starpu-1.4; then
     echo "OK: starpu-1.4 version: $(pkg-config --modversion starpu-1.4)"
@@ -217,7 +258,7 @@ verify() {
     exit 1
   fi
 
-  echo "==> [9/9] Checking GPU visibility (non-fatal if nvidia-smi is unavailable)..."
+  echo "==> [10/10] Checking GPU visibility (non-fatal if nvidia-smi is unavailable)..."
   if command -v nvidia-smi >/dev/null 2>&1; then
     nvidia-smi || true
   else
@@ -231,6 +272,7 @@ verify() {
 }
 
 install_base_deps
+ensure_mpi_wrappers_on_path
 ensure_cuda_toolkit
 detect_cuda_home
 install_fxt

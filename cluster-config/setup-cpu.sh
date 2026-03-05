@@ -45,7 +45,7 @@ download_tarball() {
 }
 
 ensure_clang18_openmp() {
-  echo "==> [2/9] Installing clang-18 + OpenMP runtime..."
+  echo "==> [2/10] Installing clang-18 + OpenMP runtime..."
 
   if command -v dnf >/dev/null 2>&1; then
     sudo dnf -y install clang18 clang18-devel clang18-tools-extra lld18
@@ -82,7 +82,48 @@ ensure_clang18_openmp() {
   echo "OK: ${clang18_bin} OpenMP toolchain is available."
 }
 
-echo "==> [1/9] Installing dependencies..."
+ensure_mpi_wrappers_on_path() {
+  echo "==> [3/10] Ensuring MPI wrappers are on PATH..."
+
+  local mpi_bin=""
+  if command -v mpicc >/dev/null 2>&1; then
+    mpi_bin="$(dirname "$(command -v mpicc)")"
+  else
+    for p in /usr/lib64/openmpi/bin /usr/lib/x86_64-linux-gnu/openmpi/bin /usr/local/openmpi/bin; do
+      if [[ -x "${p}/mpicc" ]]; then
+        mpi_bin="${p}"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "${mpi_bin}" ]]; then
+    echo "WARN: mpicc not found after package install; continuing."
+    return 0
+  fi
+
+  export PATH="${mpi_bin}:${PATH}"
+
+  sudo tee /etc/profile.d/openmpi-path.sh >/dev/null <<EOF
+# Ensure OpenMPI compiler/runtime wrappers are on PATH for all users.
+if [ -d "${mpi_bin}" ]; then
+  case ":\$PATH:" in
+    *:"${mpi_bin}":*) ;;
+    *) export PATH="${mpi_bin}:\$PATH" ;;
+  esac
+fi
+EOF
+
+  for wrapper in mpicc mpicxx mpic++ mpirun mpiexec; do
+    if [[ -x "${mpi_bin}/${wrapper}" ]]; then
+      sudo ln -sfn "${mpi_bin}/${wrapper}" "/usr/local/bin/${wrapper}"
+    fi
+  done
+
+  echo "OK: MPI wrappers available from ${mpi_bin}"
+}
+
+echo "==> [1/10] Installing dependencies..."
 
 if command -v dnf >/dev/null 2>&1; then
   sudo dnf -y groupinstall "Development Tools" || true
@@ -114,16 +155,17 @@ else
 fi
 
 ensure_clang18_openmp
+ensure_mpi_wrappers_on_path
 
-echo "==> [3/9] Creating trace folders..."
+echo "==> [4/10] Creating trace folders..."
 mkdir -p "${TRACE_DIR}"
 mkdir -p "${TRACE_PREFIX}"
 
-echo "==> [4/9] Creating build dir: ${BUILD_DIR}"
+echo "==> [5/10] Creating build dir: ${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-echo "==> [5/9] Building and installing FxT ${FXT_VER}..."
+echo "==> [6/10] Building and installing FxT ${FXT_VER}..."
 rm -rf "fxt-${FXT_VER}" "${FXT_TARBALL}"
 download_tarball "${FXT_TARBALL}" "${FXT_URL_PRIMARY}" "${FXT_URL_MIRROR}"
 tar -xzf "${FXT_TARBALL}"
@@ -133,7 +175,7 @@ make -j"${NPROC}"
 sudo env PATH="$PATH" make install
 cd "${BUILD_DIR}"
 
-echo "==> [6/9] Writing environment exports to ${ENV_FILE} (system-wide)..."
+echo "==> [7/10] Writing environment exports to ${ENV_FILE} (system-wide)..."
 sudo tee "${ENV_FILE}" >/dev/null <<EOF
 # StarPU/FxT environment (installed under ${PREFIX})
 export PATH="${PREFIX}/bin:\$PATH"
@@ -151,14 +193,14 @@ EOF
 # shellcheck disable=SC1090
 source "${ENV_FILE}"
 
-echo "==> [7/9] Ensuring /usr/local libs are visible to the dynamic linker..."
+echo "==> [8/10] Ensuring /usr/local libs are visible to the dynamic linker..."
 sudo tee /etc/ld.so.conf.d/starpu-local.conf >/dev/null <<EOF
 ${PREFIX}/lib
 ${PREFIX}/lib64
 EOF
 sudo ldconfig
 
-echo "==> [8/9] Downloading and building StarPU ${STARPU_VER} (CPU-only, FxT, MPI)..."
+echo "==> [9/10] Downloading and building StarPU ${STARPU_VER} (CPU-only, FxT, MPI)..."
 rm -rf "starpu-${STARPU_VER}" "${STARPU_TARBALL}"
 download_tarball "${STARPU_TARBALL}" "${STARPU_URL}"
 tar -xzf "${STARPU_TARBALL}"
@@ -198,7 +240,7 @@ make -j"${NPROC}"
 sudo env PATH="$PATH" make install
 sudo ldconfig
 
-echo "==> [9/9] Verifying pkg-config sees StarPU and FxT env is set..."
+echo "==> [10/10] Verifying pkg-config sees StarPU and FxT env is set..."
 echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
 
 if pkg-config --exists starpu-1.4; then
