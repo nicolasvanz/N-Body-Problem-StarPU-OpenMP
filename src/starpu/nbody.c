@@ -98,13 +98,7 @@ void nbody_vector_filter_block(void *parent_interface,
     vector_child->nx = child_nx;
     vector_child->elemsize = vector_parent->elemsize;
     vector_child->allocsize = child_nx * vector_parent->elemsize;
-    /*
-        currently starpu uses slice_base for openmp handling. as we don't use
-        starpu + openmp, we use slice_base as a offset variable that is
-        reliable for mpi environments. STARPU_VECTOR_GET_OFFSET seems to be
-        unstable at mpi environments: apparently we can lose offset information
-        when distributing or gathering subvectors to/from other nodes
-    */
+
     vector_child->slice_base =
         vector_parent->slice_base + child_offset / vector_parent->elemsize;
 
