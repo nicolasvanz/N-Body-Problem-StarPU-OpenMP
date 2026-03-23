@@ -1,7 +1,7 @@
 # Cluster Config Workflow
 
 This folder contains:
-- AMI-baking scripts for CPU/CUDA images.
+- AMI-baking scripts for CPU/CUDA/master-slave images.
 - A multi-node helper to sync/build/run across EC2 nodes.
 
 ## Files
@@ -10,6 +10,7 @@ This folder contains:
 - `ami-bake.env.example`: template for bake parameters.
 - `setup-cpu.sh`: provisions CPU image dependencies and builds StarPU/FxT.
 - `setup-cuda.sh`: provisions CUDA image dependencies and builds StarPU/FxT with CUDA.
+- `setup-ms.sh`: provisions CUDA image dependencies and builds StarPU from a git repo (or fallback local source) with FxT + MPI server-client.
 - `cluster-mpi.sh`: parses cluster IP output, syncs repo to all nodes, builds on all nodes, and runs MPI from one node with generated hostfile.
 - `cluster-mpi.env.example`: template for `cluster-mpi.sh` settings.
 
@@ -25,6 +26,13 @@ This folder contains:
 - StarPU 1.4.7 + FxT 0.3.15 (MPI + CUDA enabled).
 - CUDA toolkit detection and environment wiring.
 - OpenMPI toolchain for StarPU MPI builds.
+
+`setup-ms.sh`:
+- Clones and builds your custom StarPU checkout from:
+  - `STARPU_REPO_URL` + `STARPU_REPO_REF` (default path), or
+  - local source in `$STARPU_SRC_DIR` if `STARPU_REPO_URL` is empty.
+- Enables `--enable-mpi-server-client --enable-cuda --enable-fxt`.
+- Installs under `/usr/local` and enables FxT trace env exports.
 
 ## Prerequisites
 
@@ -42,6 +50,11 @@ Edit `cluster-config/ami-bake.env`:
 - `REGION`
 - `BASE_AMI_CPU`
 - `BASE_AMI_CUDA`
+- `BASE_AMI_MASTER_SLAVE` (optional; defaults to `BASE_AMI_CUDA`)
+- `STARPU_REPO_URL` (for `--type master-slave`, defaults to `https://github.com/nicolasvanz/starpu-ms-gpu.git`)
+- `STARPU_REPO_REF` (for `--type master-slave`, defaults to `enhancement/ms-cuda-support`)
+- `STARPU_REPO_TOKEN` (required if repo is private and cloned over HTTPS)
+- `REMOTE_STARPU_SRC` (builder checkout path, defaults to `$HOME/code/starpu`)
 - `SUBNET_ID`
 - `SECURITY_GROUP_IDS`
 - `KEY_NAME`
@@ -61,6 +74,17 @@ CUDA AMI:
 ./cluster-config/bake-ami.sh --type cuda
 ```
 
+Custom master-slave image (clones your StarPU repo on builder):
+
+```bash
+./cluster-config/bake-ami.sh --type master-slave
+```
+
+Note:
+- `--type master-slave` clones `STARPU_REPO_URL` at `STARPU_REPO_REF` on the builder by default.
+- For private repos, set `STARPU_REPO_TOKEN` in `ami-bake.env`.
+- If `STARPU_REPO_URL` is set to empty, the script falls back to uploading `LOCAL_STARPU_SRC`.
+
 Keep builder instance after failure or success:
 
 ```bash
@@ -73,6 +97,7 @@ Keep builder instance after failure or success:
 ./cluster-config/bake-ami.sh --type cpu --region us-east-1
 ./cluster-config/bake-ami.sh --type cpu --base-ami ami-xxxx --instance-type m5.2xlarge
 ./cluster-config/bake-ami.sh --type cuda --sg-ids sg-aaa,sg-bbb
+./cluster-config/bake-ami.sh --type master-slave --base-ami ami-zzzz --instance-type g6.xlarge
 ```
 
 ## Multi-Node Test Workflow

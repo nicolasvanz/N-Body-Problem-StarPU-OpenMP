@@ -8,8 +8,10 @@ AMI_ENV_FILE="${SCRIPT_DIR}/ami-bake.env"
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 BASE_AMI_CPU=""
 BASE_AMI_CUDA=""
+BASE_AMI_MASTER_SLAVE=""
 INSTANCE_TYPE_CPU="c7i.2xlarge"
 INSTANCE_TYPE_CUDA="g5.xlarge"
+INSTANCE_TYPE_MASTER_SLAVE=""
 SUBNET_ID=""
 declare -a SECURITY_GROUP_IDS=()
 IAM_INSTANCE_PROFILE=""
@@ -21,6 +23,8 @@ SSH_OPTIONS=(
   -o StrictHostKeyChecking=accept-new
   -o ConnectTimeout=10
 )
+AUTO_DETECT_SSH_USER=1
+SSH_USER_CANDIDATES=()
 BAKE_SSH_ADDRESS="public"
 AMI_NAME_PREFIX="nbody-starpu"
 AMI_DESCRIPTION_PREFIX="N-Body StarPU/OpenMP"
@@ -31,6 +35,11 @@ WAIT_IMAGE=1
 WAIT_INSTANCE_TIMEOUT_SECS=1800
 WAIT_IMAGE_TIMEOUT_SECS=3600
 WAIT_POLL_SECONDS=10
+LOCAL_STARPU_SRC="${HOME}/code/starpu"
+REMOTE_STARPU_SRC="\$HOME/code/starpu"
+STARPU_REPO_URL="https://github.com/nicolasvanz/starpu-ms-gpu.git"
+STARPU_REPO_REF="enhancement/ms-cuda-support"
+STARPU_REPO_TOKEN="${GITHUB_TOKEN:-}"
 
 NODE_TYPE=""
 AMI_NAME=""
@@ -38,17 +47,21 @@ AMI_DESCRIPTION=""
 BASE_AMI=""
 INSTANCE_TYPE=""
 BUILDER_INSTANCE_ID=""
+ACTIVE_SSH_USER=""
 
 usage() {
   cat <<USAGE
-Usage: $(basename "$0") [options] --type cpu|cuda
+Usage: $(basename "$0") [options] --type cpu|cuda|master-slave
 
 Options:
-  -t, --type <cpu|cuda>      Node type to bake.
+  -t, --type <cpu|cuda|master-slave>
+                              Node type to bake. Aliases: ms, master_slave.
   --ami-env <file>           AMI bake env file (default: cluster-config/ami-bake.env).
   --region <region>          AWS region override.
   --base-ami <ami-id>        Override base AMI for this bake.
   --instance-type <type>     Override builder instance type.
+  --starpu-repo-url <url>    Override StarPU git URL for --type master-slave.
+  --starpu-repo-ref <ref>    Override StarPU git ref for --type master-slave.
   --subnet-id <subnet-id>    Override subnet id.
   --sg-ids <sg1,sg2>         Override security group ids (comma-separated).
   --key-name <keypair-name>  Override EC2 key pair name.
@@ -63,6 +76,7 @@ Options:
 Examples:
   $(basename "$0") --type cpu
   $(basename "$0") --type cuda --base-ami ami-abc123 --instance-type g5.xlarge
+  $(basename "$0") --type master-slave
 USAGE
 }
 
@@ -123,6 +137,14 @@ parse_args() {
         ;;
       --instance-type)
         INSTANCE_TYPE="$2"
+        shift 2
+        ;;
+      --starpu-repo-url)
+        STARPU_REPO_URL="$2"
+        shift 2
+        ;;
+      --starpu-repo-ref)
+        STARPU_REPO_REF="$2"
         shift 2
         ;;
       --subnet-id)
@@ -190,25 +212,44 @@ preparse_env_files() {
 
 resolve_defaults() {
   NODE_TYPE="$(printf '%s' "$NODE_TYPE" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$NODE_TYPE" != "cpu" && "$NODE_TYPE" != "cuda" ]]; then
-    echo "--type must be cpu or cuda" >&2
+
+  case "$NODE_TYPE" in
+    ms|master_slave)
+      NODE_TYPE="master-slave"
+      ;;
+  esac
+
+  if [[ "$NODE_TYPE" != "cpu" && "$NODE_TYPE" != "cuda" && "$NODE_TYPE" != "master-slave" ]]; then
+    echo "--type must be cpu, cuda, or master-slave" >&2
     exit 1
   fi
 
   if [[ -z "$BASE_AMI" ]]; then
-    if [[ "$NODE_TYPE" == "cuda" ]]; then
-      BASE_AMI="$BASE_AMI_CUDA"
-    else
-      BASE_AMI="$BASE_AMI_CPU"
-    fi
+    case "$NODE_TYPE" in
+      cpu)
+        BASE_AMI="$BASE_AMI_CPU"
+        ;;
+      cuda)
+        BASE_AMI="$BASE_AMI_CUDA"
+        ;;
+      master-slave)
+        BASE_AMI="${BASE_AMI_MASTER_SLAVE:-$BASE_AMI_CUDA}"
+        ;;
+    esac
   fi
 
   if [[ -z "$INSTANCE_TYPE" ]]; then
-    if [[ "$NODE_TYPE" == "cuda" ]]; then
-      INSTANCE_TYPE="$INSTANCE_TYPE_CUDA"
-    else
-      INSTANCE_TYPE="$INSTANCE_TYPE_CPU"
-    fi
+    case "$NODE_TYPE" in
+      cpu)
+        INSTANCE_TYPE="$INSTANCE_TYPE_CPU"
+        ;;
+      cuda)
+        INSTANCE_TYPE="$INSTANCE_TYPE_CUDA"
+        ;;
+      master-slave)
+        INSTANCE_TYPE="${INSTANCE_TYPE_MASTER_SLAVE:-$INSTANCE_TYPE_CUDA}"
+        ;;
+    esac
   fi
 
   local instance_type_label
@@ -232,7 +273,11 @@ resolve_defaults() {
   fi
 
   if [[ -z "$BASE_AMI" ]]; then
-    echo "Base AMI is required. Set BASE_AMI_${NODE_TYPE^^} in ${AMI_ENV_FILE} or pass --base-ami." >&2
+    local base_key="BASE_AMI_${NODE_TYPE^^}"
+    if [[ "$NODE_TYPE" == "master-slave" ]]; then
+      base_key="BASE_AMI_MASTER_SLAVE (or BASE_AMI_CUDA fallback)"
+    fi
+    echo "Base AMI is required. Set ${base_key} in ${AMI_ENV_FILE} or pass --base-ami." >&2
     exit 1
   fi
 
@@ -265,6 +310,10 @@ resolve_defaults() {
     echo "BAKE_SSH_ADDRESS must be 'public' or 'private'" >&2
     exit 1
   fi
+
+  if [[ -z "${STARPU_REPO_TOKEN}" && -n "${GITHUB_TOKEN:-}" ]]; then
+    STARPU_REPO_TOKEN="${GITHUB_TOKEN}"
+  fi
 }
 
 build_ssh_args() {
@@ -280,20 +329,68 @@ build_ssh_args() {
     SSH_ARGS+=( "${SSH_OPTIONS[@]}" )
     SCP_ARGS+=( "${SSH_OPTIONS[@]}" )
   fi
+
+  # Never prompt for password in automation loops.
+  SSH_ARGS+=( -o BatchMode=yes -o PreferredAuthentications=publickey )
+  SCP_ARGS+=( -o BatchMode=yes )
+
+  ACTIVE_SSH_USER="$SSH_USER"
+}
+
+candidate_ssh_users() {
+  local users=("$SSH_USER")
+  local defaults=("${SSH_USER_CANDIDATES[@]}")
+
+  if [[ "$AUTO_DETECT_SSH_USER" -eq 1 ]]; then
+    if ((${#defaults[@]} == 0)); then
+      defaults=(ec2-user ubuntu admin debian centos fedora rocky almalinux)
+    fi
+  else
+    defaults=()
+  fi
+
+  local u
+  for u in "${defaults[@]}"; do
+    [[ -z "$u" || "$u" == "$SSH_USER" ]] && continue
+    users+=("$u")
+  done
+
+  printf '%s\n' "${users[@]}"
 }
 
 wait_for_instance_ssh() {
   local host="$1"
   local deadline=$((SECONDS + WAIT_INSTANCE_TIMEOUT_SECS))
+  local attempt=0
+  local last_err=""
 
   while ((SECONDS < deadline)); do
-    if ssh "${SSH_ARGS[@]}" "${SSH_USER}@${host}" 'true' >/dev/null 2>&1; then
-      return 0
+    attempt=$((attempt + 1))
+    echo "Waiting for SSH on ${host} (attempt ${attempt}, ${WAIT_POLL_SECONDS}s poll interval)..."
+
+    local user
+    while IFS= read -r user; do
+      [[ -z "$user" ]] && continue
+      echo "  trying user: ${user}"
+      if last_err="$(ssh "${SSH_ARGS[@]}" "${user}@${host}" 'true' 2>&1)"; then
+        ACTIVE_SSH_USER="$user"
+        echo "SSH ready on ${host} with user '${ACTIVE_SSH_USER}'."
+        return 0
+      fi
+    done < <(candidate_ssh_users)
+
+    local remaining=$((deadline - SECONDS))
+    if ((remaining < 0)); then
+      remaining=0
     fi
+    echo "  not ready yet, ~${remaining}s remaining before timeout"
     sleep "$WAIT_POLL_SECONDS"
   done
 
   echo "Timed out waiting for SSH on ${host}" >&2
+  if [[ -n "$last_err" ]]; then
+    echo "Last SSH error: $(printf '%s\n' "$last_err" | tail -n 1)" >&2
+  fi
   return 1
 }
 
@@ -368,24 +465,114 @@ get_builder_host() {
 run_setup_script() {
   local host="$1"
   local setup_local setup_remote
+  local master_slave_src_dir="${REMOTE_STARPU_SRC}"
 
-  if [[ "$NODE_TYPE" == "cuda" ]]; then
-    setup_local="${SCRIPT_DIR}/setup-cuda.sh"
-  else
-    setup_local="${SCRIPT_DIR}/setup-cpu.sh"
-  fi
+  case "$NODE_TYPE" in
+    cpu)
+      setup_local="${SCRIPT_DIR}/setup-cpu.sh"
+      ;;
+    cuda)
+      setup_local="${SCRIPT_DIR}/setup-cuda.sh"
+      ;;
+    master-slave)
+      setup_local="${SCRIPT_DIR}/setup-ms.sh"
+      ;;
+    *)
+      echo "Unsupported NODE_TYPE for setup script: ${NODE_TYPE}" >&2
+      exit 1
+      ;;
+  esac
 
   if [[ ! -f "$setup_local" ]]; then
     echo "Setup script not found: $setup_local" >&2
     exit 1
   fi
 
+  if [[ "$NODE_TYPE" == "master-slave" ]]; then
+    local remote_src="${REMOTE_STARPU_SRC}"
+
+    # Common pitfall: REMOTE_STARPU_SRC accidentally set with local $HOME
+    # (e.g. /home/nvanz/...) while remote user is ubuntu/ec2-user.
+    # Rewrite that into remote-home-relative path.
+    if [[ "$remote_src" == "${HOME}"* ]]; then
+      local suffix="${remote_src#${HOME}}"
+      remote_src="\$HOME${suffix}"
+      echo "Rewriting REMOTE_STARPU_SRC to remote user home: ${remote_src}"
+    fi
+    master_slave_src_dir="${remote_src}"
+
+    if [[ -n "${STARPU_REPO_URL}" ]]; then
+      echo "Using remote StarPU repo for master-slave bake:"
+      echo "  URL: ${STARPU_REPO_URL}"
+      echo "  REF: ${STARPU_REPO_REF}"
+    else
+      local local_src="${LOCAL_STARPU_SRC}"
+      if [[ ! -d "$local_src" ]]; then
+        echo "Local StarPU source not found: ${local_src}" >&2
+        echo "Set LOCAL_STARPU_SRC in ${AMI_ENV_FILE} or export it before running bake-ami.sh." >&2
+        exit 1
+      fi
+
+      local local_src_human
+      local_src_human="$(du -sh "$local_src" | awk '{print $1}')"
+      echo "STARPU_REPO_URL is empty; uploading local StarPU source (${local_src_human}) to builder (${remote_src})..."
+      ssh "${SSH_ARGS[@]}" "${ACTIVE_SSH_USER}@${host}" \
+        "mkdir -p \"\$(dirname ${remote_src})\" && rm -rf \"${remote_src}\""
+
+      local base_name
+      base_name="$(basename "$local_src")"
+      local base_parent
+      base_parent="$(dirname "$local_src")"
+
+      local -a tar_cmd=(
+        tar -C "$base_parent" -czf -
+        --exclude="${base_name}/.git"
+        --exclude="${base_name}/autom4te.cache"
+        --exclude="${base_name}/build"
+        --exclude="${base_name}/build-*"
+        --exclude="${base_name}/src/.libs"
+        --exclude="${base_name}/**/.libs"
+        "$base_name"
+      )
+
+      if command -v pv >/dev/null 2>&1; then
+        local total_bytes
+        total_bytes="$(du -sb "$local_src" | awk '{print $1}')"
+        "${tar_cmd[@]}" \
+          | pv -s "$total_bytes" \
+          | ssh "${SSH_ARGS[@]}" "${ACTIVE_SSH_USER}@${host}" \
+            "tar -xzf - -C \"\$(dirname ${remote_src})\""
+      else
+        "${tar_cmd[@]}" \
+          | ssh "${SSH_ARGS[@]}" "${ACTIVE_SSH_USER}@${host}" \
+            "tar -xzf - -C \"\$(dirname ${remote_src})\""
+      fi
+    fi
+  fi
+
   setup_remote="~/setup-${NODE_TYPE}.sh"
   echo "Uploading setup script to ${host}..."
-  scp "${SCP_ARGS[@]}" "$setup_local" "${SSH_USER}@${host}:${setup_remote}"
+  scp "${SCP_ARGS[@]}" "$setup_local" "${ACTIVE_SSH_USER}@${host}:${setup_remote}"
 
   echo "Running setup script on builder..."
-  ssh "${SSH_ARGS[@]}" "${SSH_USER}@${host}" "bash -lc $(printf '%q' "chmod +x ${setup_remote} && ${setup_remote}")"
+  if [[ "$NODE_TYPE" == "master-slave" ]]; then
+    local setup_cmd
+    setup_cmd="chmod +x ${setup_remote} && STARPU_SRC_DIR=${master_slave_src_dir}"
+    if [[ -n "${STARPU_REPO_URL}" ]]; then
+      setup_cmd+=" STARPU_REPO_URL=$(printf '%q' "${STARPU_REPO_URL}")"
+      setup_cmd+=" STARPU_REPO_REF=$(printf '%q' "${STARPU_REPO_REF}")"
+      if [[ -n "${STARPU_REPO_TOKEN}" ]]; then
+        setup_cmd+=" STARPU_REPO_TOKEN=$(printf '%q' "${STARPU_REPO_TOKEN}")"
+      fi
+    fi
+    setup_cmd+=" ${setup_remote}"
+
+    ssh "${SSH_ARGS[@]}" "${ACTIVE_SSH_USER}@${host}" \
+      "bash -lc $(printf '%q' "${setup_cmd}")"
+  else
+    ssh "${SSH_ARGS[@]}" "${ACTIVE_SSH_USER}@${host}" \
+      "bash -lc $(printf '%q' "chmod +x ${setup_remote} && ${setup_remote}")"
+  fi
 }
 
 create_ami() {
