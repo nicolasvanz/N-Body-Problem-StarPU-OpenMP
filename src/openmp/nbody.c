@@ -310,6 +310,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "ERROR: tiled algorithm is only available in the StarPU backend.\n");
         return 1;
     }
+    if (opts.backend == BACKEND_MASTER_SLAVE) {
+        fprintf(stderr,
+                "ERROR: master-slave backend is only available in the StarPU backend.\n");
+        return 1;
+    }
 
     bodyforce_fn bodyforce = bodyForce_cpu;
     integrate_fn integrate = integratePositions_cpu;

@@ -51,6 +51,10 @@ static int parse_backend(const char *s, backend_t *backend) {
         *backend = BACKEND_MPI;
         return 1;
     }
+    if (strcmp(s, "master-slave") == 0 || strcmp(s, "masterslave") == 0) {
+        *backend = BACKEND_MASTER_SLAVE;
+        return 1;
+    }
     return 0;
 }
 
@@ -110,9 +114,10 @@ void print_usage(const char *prog) {
             "  -n, --n <count>         Number of bodies (absolute value)\n"
             "  -p, --parts <count>     Number of StarPU partitions\n"
             "  --exp <e>               Legacy exponent (nBodies = 2 << e)\n"
-            "  -b, --backend <type>    Backend: mpi or single\n"
+            "  -b, --backend <type>    Backend: mpi, single, or master-slave\n"
             "  --mpi                   Shorthand for --backend mpi\n"
             "  --single                Shorthand for --backend single\n"
+            "  --master-slave          Shorthand for --backend master-slave\n"
             "  -m, --mode <mode>       Mode: cpu, gpu, or hybrid\n"
             "  --cpu                   Shorthand for --mode cpu\n"
             "  --gpu                   Shorthand for --mode gpu\n"
@@ -171,6 +176,11 @@ int parse_options(int argc, char **argv, options_t *opts) {
         }
         if (strcmp(arg, "--single") == 0) {
             opts->backend = BACKEND_SINGLE;
+            opts->backend_set = 1;
+            continue;
+        }
+        if (strcmp(arg, "--master-slave") == 0) {
+            opts->backend = BACKEND_MASTER_SLAVE;
             opts->backend_set = 1;
             continue;
         }

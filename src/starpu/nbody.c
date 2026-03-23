@@ -166,27 +166,35 @@ static int configure_codelets(compute_mode_t mode,
 
     if (mode == MODE_CPU) {
         bodyforce_cl->cpu_funcs[0] = bodyForce_cpu;
+        bodyforce_cl->cpu_funcs_name[0] = "bodyForce_cpu";
         integrate_cl->cpu_funcs[0] = integratePositions_cpu;
-        bodyforce_cl->where = STARPU_CPU;
-        integrate_cl->where = STARPU_CPU;
+        integrate_cl->cpu_funcs_name[0] = "integratePositions_cpu";
+        bodyforce_cl->where = STARPU_CPU | NBODY_MPI_MS_MASK;
+        integrate_cl->where = STARPU_CPU | NBODY_MPI_MS_MASK;
         return 0;
     }
 
 #if NBODY_USE_CUDA
     if (mode == MODE_GPU) {
         bodyforce_cl->cuda_funcs[0] = bodyForce_cuda;
+        bodyforce_cl->cuda_funcs_name[0] = "bodyForce_cuda";
         integrate_cl->cuda_funcs[0] = integratePositions_cuda;
-        bodyforce_cl->where = STARPU_CUDA;
-        integrate_cl->where = STARPU_CUDA;
+        integrate_cl->cuda_funcs_name[0] = "integratePositions_cuda";
+        bodyforce_cl->where = STARPU_CUDA | NBODY_MPI_MS_MASK;
+        integrate_cl->where = STARPU_CUDA | NBODY_MPI_MS_MASK;
         return 0;
     }
     if (mode == MODE_HYBRID) {
         bodyforce_cl->cpu_funcs[0] = bodyForce_cpu;
+        bodyforce_cl->cpu_funcs_name[0] = "bodyForce_cpu";
         integrate_cl->cpu_funcs[0] = integratePositions_cpu;
+        integrate_cl->cpu_funcs_name[0] = "integratePositions_cpu";
         bodyforce_cl->cuda_funcs[0] = bodyForce_cuda;
+        bodyforce_cl->cuda_funcs_name[0] = "bodyForce_cuda";
         integrate_cl->cuda_funcs[0] = integratePositions_cuda;
-        bodyforce_cl->where = 0;
-        integrate_cl->where = 0;
+        integrate_cl->cuda_funcs_name[0] = "integratePositions_cuda";
+        bodyforce_cl->where = STARPU_CPU | STARPU_CUDA | NBODY_MPI_MS_MASK;
+        integrate_cl->where = STARPU_CPU | STARPU_CUDA | NBODY_MPI_MS_MASK;
         return 0;
     }
 #else
@@ -306,6 +314,12 @@ int main(int argc, char **argv) {
     }
 
     if (opts.algorithm == ALGO_TILED) {
+        if (opts.backend == BACKEND_MASTER_SLAVE) {
+            fprintf(stderr,
+                    "ERROR: tiled algorithm is not implemented for master-slave backend.\n");
+            return 1;
+        }
+
         struct starpu_codelet acc_init_cl;
         struct starpu_codelet acc_redux_cl;
         struct starpu_codelet bodyforce_tile_cl;
@@ -355,6 +369,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "ERROR: MPI backend requested but binary built without MPI.\n");
         return 1;
 #endif
+    }
+
+    if (opts.backend == BACKEND_MASTER_SLAVE) {
+        return nbody_run_master_slave_classic(&opts, &bodyforce_cl, &integrate_cl);
     }
 
     return nbody_run_single(&opts, &bodyforce_cl, &integrate_cl);

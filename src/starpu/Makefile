@@ -18,7 +18,7 @@ PROGS=nbody
 
 include ./starpu.mk
 
-NBODY_OBJS := nbody.o nbody_single.o nbody_tiled.o nbody_cpu.o options.o debug_paths.o
+NBODY_OBJS := nbody.o nbody_single.o nbody_master_slave.o nbody_tiled.o nbody_cpu.o options.o debug_paths.o
 ifeq ($(USE_MPI),1)
 NBODY_OBJS += nbody_mpi.o nbody_tiled_mpi.o
 else

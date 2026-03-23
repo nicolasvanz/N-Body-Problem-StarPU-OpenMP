@@ -10,6 +10,7 @@ typedef enum {
 typedef enum {
     BACKEND_SINGLE = 0,
     BACKEND_MPI = 1,
+    BACKEND_MASTER_SLAVE = 2,
 } backend_t;
 
 typedef enum {

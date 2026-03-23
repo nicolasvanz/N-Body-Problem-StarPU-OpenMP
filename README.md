@@ -108,9 +108,10 @@ Shared by both backends:
 
 - `-n, --n <count>`: number of bodies (positive integer).
 - `--exp <e>`: legacy exponent, computes `nBodies = 1 << (e + 1)` (same as `2 << e`).
-- `-b, --backend <single|mpi>`: execution backend.
+- `-b, --backend <single|mpi|master-slave>`: execution backend.
 - `--single`: shorthand for `--backend single`.
 - `--mpi`: shorthand for `--backend mpi`.
+- `--master-slave`: shorthand for `--backend master-slave`.
 - `-m, --mode <cpu|gpu|hybrid>`: compute mode.
 - `--cpu`: shorthand for `--mode cpu`.
 - `--gpu`: shorthand for `--mode gpu`.
@@ -133,6 +134,7 @@ Algorithm notes:
 
 - `classic` is the original two-phase loop (all velocity updates, then position updates).
 - `tiled` is implemented for the StarPU backend and supports `--cpu`, `--gpu`, and `--hybrid` with both `--single` and `--mpi`.
+- `master-slave` currently supports the StarPU `classic` algorithm in `cpu`, `gpu`, and `hybrid` modes.
 
 ## Compile Examples
 
@@ -184,6 +186,17 @@ mpirun -np 2 ./src/openmp/nbody --mpi --gpu --n 262144
 
 mpirun --bind-to board -np 2 ./src/starpu/nbody --mpi --cpu --exp 18
 mpirun --bind-to board -np 2 ./src/starpu/nbody --mpi --gpu --n 262144
+
+# StarPU MPI server-client (master-slave), classic CPU mode
+STARPU_WORKERS_GETBIND=0 \
+STARPU_NMPI_SC=1 STARPU_MPI_SC_NTHREADS=2 STARPU_MPI_SC_NCUDA=0 \
+mpirun -np 2 ./src/starpu/nbody --master-slave --classic --cpu --exp 12
+
+# StarPU MPI server-client (master-slave), classic GPU mode
+# Requires remote sink CUDA lanes to be available.
+STARPU_WORKERS_GETBIND=0 \
+STARPU_NMPI_SC=1 STARPU_MPI_SC_NTHREADS=1 STARPU_MPI_SC_NCUDA=1 \
+mpirun -np 2 ./src/starpu/nbody --master-slave --classic --gpu --exp 12
 ```
 
 ## Debug Output and Result Comparison
