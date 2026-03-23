@@ -10,17 +10,17 @@ ifeq ($(USE_MPI),1)
   CC = mpicc
   CPPFLAGS += $(shell pkg-config --cflags starpu-$(STARPU_VERSION) --cflags starpumpi-$(STARPU_VERSION))
   LDLIBS += $(shell pkg-config --libs starpu-$(STARPU_VERSION) --libs starpumpi-$(STARPU_VERSION))
-  NVCCFLAGS = $(shell pkg-config --cflags starpu-$(STARPU_VERSION) --cflags starpumpi-$(STARPU_VERSION)) -std=c++11
   CFLAGS += -DUSE_MPI=1
 else
   CC ?= cc
   CPPFLAGS += $(shell pkg-config --cflags starpu-$(STARPU_VERSION))
   LDLIBS += $(shell pkg-config --libs starpu-$(STARPU_VERSION))
-  NVCCFLAGS = $(shell pkg-config --cflags starpu-$(STARPU_VERSION)) -std=c++11
   CFLAGS += -DUSE_MPI=0
 endif
+NVCCFLAGS = $(CPPFLAGS) -std=c++11
 
 CFLAGS += -O3 -Wall -Wextra -lm -fopenmp
+LDFLAGS += -rdynamic
 
 ifeq ($(DEBUG),1)
   CFLAGS += -DDEBUG
@@ -28,6 +28,7 @@ ifeq ($(DEBUG),1)
 endif
 
 ifeq ($(USE_CUDA),1)
+  CPPFLAGS += -I$(CUDA_PATH)/include
   CFLAGS += -DOPTIONS_DEFAULT_MODE=MODE_GPU
   CFLAGS += -DNBODY_USE_CUDA=1
 else
