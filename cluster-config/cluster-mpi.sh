@@ -634,6 +634,7 @@ cmd_sync() {
     rsync -az \
       --exclude '.git/' \
       --exclude 'cluster-config/.cluster/' \
+      --exclude 'results/' \
       -e "$rsync_ssh_cmd" \
       "${REPO_ROOT}/" "${SSH_USER}@${ip}:${REMOTE_REPO_DIR}/"
   done

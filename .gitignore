@@ -62,5 +62,6 @@ starpu.pdf
 
 cluster-config/ami-bake.env
 cluster-config/cluster-mpi.env
+cluster-config/experiments.env
 cluster-config/.cluster/
 traces/

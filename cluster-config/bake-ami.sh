@@ -40,6 +40,7 @@ REMOTE_STARPU_SRC="\$HOME/code/starpu"
 STARPU_REPO_URL="https://github.com/nicolasvanz/starpu-ms-gpu.git"
 STARPU_REPO_REF="enhancement/ms-cuda-support"
 STARPU_REPO_TOKEN="${GITHUB_TOKEN:-}"
+STARPU_MAXMPIDEV="16"
 
 NODE_TYPE=""
 AMI_NAME=""
@@ -62,6 +63,7 @@ Options:
   --instance-type <type>     Override builder instance type.
   --starpu-repo-url <url>    Override StarPU git URL for --type master-slave.
   --starpu-repo-ref <ref>    Override StarPU git ref for --type master-slave.
+  --starpu-maxmpidev <n>     Override StarPU --enable-maxmpidev for --type master-slave.
   --subnet-id <subnet-id>    Override subnet id.
   --sg-ids <sg1,sg2>         Override security group ids (comma-separated).
   --key-name <keypair-name>  Override EC2 key pair name.
@@ -145,6 +147,10 @@ parse_args() {
         ;;
       --starpu-repo-ref)
         STARPU_REPO_REF="$2"
+        shift 2
+        ;;
+      --starpu-maxmpidev)
+        STARPU_MAXMPIDEV="$2"
         shift 2
         ;;
       --subnet-id)
@@ -313,6 +319,11 @@ resolve_defaults() {
 
   if [[ -z "${STARPU_REPO_TOKEN}" && -n "${GITHUB_TOKEN:-}" ]]; then
     STARPU_REPO_TOKEN="${GITHUB_TOKEN}"
+  fi
+
+  if ! [[ "${STARPU_MAXMPIDEV}" =~ ^[0-9]+$ ]]; then
+    echo "STARPU_MAXMPIDEV must be a non-negative integer (got: ${STARPU_MAXMPIDEV})." >&2
+    exit 1
   fi
 }
 
@@ -558,6 +569,7 @@ run_setup_script() {
   if [[ "$NODE_TYPE" == "master-slave" ]]; then
     local setup_cmd
     setup_cmd="chmod +x ${setup_remote} && STARPU_SRC_DIR=${master_slave_src_dir}"
+    setup_cmd+=" STARPU_MAXMPIDEV=$(printf '%q' "${STARPU_MAXMPIDEV}")"
     if [[ -n "${STARPU_REPO_URL}" ]]; then
       setup_cmd+=" STARPU_REPO_URL=$(printf '%q' "${STARPU_REPO_URL}")"
       setup_cmd+=" STARPU_REPO_REF=$(printf '%q' "${STARPU_REPO_REF}")"

@@ -1,6 +1,7 @@
 STARPU_VERSION ?= 1.4
 USE_MPI ?= 1
 DEBUG ?= 0
+GPU_ARCH ?= sm_80
 
 NVCC ?= nvcc
 CUDA_PATH ?= $(shell sh -c 'nvcc_path=$$(command -v $(NVCC) 2>/dev/null); if [ -n "$$nvcc_path" ]; then dirname "$$(dirname "$$nvcc_path")"; else echo /usr/local/cuda; fi')
@@ -31,6 +32,7 @@ ifeq ($(USE_CUDA),1)
   CPPFLAGS += -I$(CUDA_PATH)/include
   CFLAGS += -DOPTIONS_DEFAULT_MODE=MODE_GPU
   CFLAGS += -DNBODY_USE_CUDA=1
+  NVCCFLAGS += -arch=$(GPU_ARCH)
 else
   CFLAGS += -DOPTIONS_DEFAULT_MODE=MODE_CPU
   CFLAGS += -DNBODY_USE_CUDA=0

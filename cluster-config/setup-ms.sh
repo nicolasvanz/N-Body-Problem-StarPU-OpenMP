@@ -10,6 +10,7 @@ STARPU_SRC_DIR="${STARPU_SRC_DIR:-${HOME}/code/starpu}"
 STARPU_REPO_URL="${STARPU_REPO_URL:-}"
 STARPU_REPO_REF="${STARPU_REPO_REF:-master}"
 STARPU_REPO_TOKEN="${STARPU_REPO_TOKEN:-}"
+STARPU_MAXMPIDEV="${STARPU_MAXMPIDEV:-16}"
 ENV_FILE="/etc/profile.d/starpu.sh"
 TRACE_DIR="${HOME}/starpu_traces"
 TRACE_PREFIX="${TRACE_DIR}/fxt"
@@ -266,9 +267,15 @@ EOF
 
 build_starpu_ms() {
   echo "==> [8/10] Building and installing custom StarPU (CUDA + FxT + MPI server-client)..."
+  echo "Using STARPU_MAXMPIDEV=${STARPU_MAXMPIDEV}"
   cd "${STARPU_SRC_DIR}"
   mkdir -p build-ms
   cd build-ms
+
+  if ! [[ "${STARPU_MAXMPIDEV}" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: STARPU_MAXMPIDEV must be a non-negative integer (got: ${STARPU_MAXMPIDEV})"
+    exit 1
+  fi
 
   if command -v mpicc >/dev/null 2>&1; then
     export CC=mpicc
@@ -284,6 +291,7 @@ build_starpu_ms() {
     --disable-starpupy \
     --enable-fxt \
     --enable-mpi-server-client \
+    --enable-maxmpidev="${STARPU_MAXMPIDEV}" \
     CPPFLAGS="-I${CUDA_HOME}/include" \
     LDFLAGS="-L${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib"
 

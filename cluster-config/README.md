@@ -13,6 +13,8 @@ This folder contains:
 - `setup-ms.sh`: provisions CUDA image dependencies and builds StarPU from a git repo (or fallback local source) with FxT + MPI server-client.
 - `cluster-mpi.sh`: parses cluster IP output, syncs repo to all nodes, builds on all nodes, and runs MPI from one node with generated hostfile.
 - `cluster-mpi.env.example`: template for `cluster-mpi.sh` settings.
+- `run-experiments.sh`: automates benchmark matrices for StarPU MPI vs master-slave and stores CSV summaries.
+- `experiments.env.example`: template for `run-experiments.sh` settings.
 
 ## What The Scripts Install
 
@@ -32,6 +34,7 @@ This folder contains:
   - `STARPU_REPO_URL` + `STARPU_REPO_REF` (default path), or
   - local source in `$STARPU_SRC_DIR` if `STARPU_REPO_URL` is empty.
 - Enables `--enable-mpi-server-client --enable-cuda --enable-fxt`.
+- Configures `--enable-maxmpidev` via `STARPU_MAXMPIDEV` (default `16`).
 - Installs under `/usr/local` and enables FxT trace env exports.
 
 ## Prerequisites
@@ -54,6 +57,7 @@ Edit `cluster-config/ami-bake.env`:
 - `STARPU_REPO_URL` (for `--type master-slave`, defaults to `https://github.com/nicolasvanz/starpu-ms-gpu.git`)
 - `STARPU_REPO_REF` (for `--type master-slave`, defaults to `enhancement/ms-cuda-support`)
 - `STARPU_REPO_TOKEN` (required if repo is private and cloned over HTTPS)
+- `STARPU_MAXMPIDEV` (for `--type master-slave`, defaults to `16`)
 - `REMOTE_STARPU_SRC` (builder checkout path, defaults to `$HOME/code/starpu`)
 - `SUBNET_ID`
 - `SECURITY_GROUP_IDS`
@@ -229,6 +233,27 @@ Open traces in starvz:
 ./cluster-config/cluster-mpi.sh open-starvz-pdf
 ./cluster-config/cluster-mpi.sh open-starvz-pdf 04032026-203208
 ```
+
+## Experiment Automation
+
+Use this runner to execute reproducible MPI vs master-slave experiments and
+store results under `results/experiments/<session>`:
+
+```bash
+cp cluster-config/experiments.env.example cluster-config/experiments.env
+# edit if needed
+
+./cluster-config/run-experiments.sh --mode both
+```
+
+Outputs:
+- `results.csv`: one row per repetition (`warmup` + `timed`).
+- `summary.csv`: aggregate stats (mean/min/max/stddev) over successful timed rows.
+
+Default power-equivalent pairs are:
+- MPI 2 <-> MS 3
+- MPI 4 <-> MS 5
+- MPI 8 <-> MS 9
 
 ## Rank 0 / Master Notes
 
