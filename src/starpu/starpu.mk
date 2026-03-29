@@ -43,8 +43,13 @@ LDLIBS += -fopenmp -lm -Wl,-rpath -Wl,$(shell pkg-config --variable=libdir starp
 
 # Automatically enable CUDA / OpenCL
 STARPU_CONFIG=$(shell pkg-config --variable=includedir starpu-$(STARPU_VERSION))/starpu/$(STARPU_VERSION)/starpu_config.h
+STARPU_TASK_H=$(shell pkg-config --variable=includedir starpu-$(STARPU_VERSION))/starpu/$(STARPU_VERSION)/starpu_task.h
 ifneq ($(shell grep "STARPU_USE_CUDA 1" $(STARPU_CONFIG)),)
 USE_CUDA=1
+endif
+
+ifneq ($(shell sh -c 'grep -q "cuda_funcs_name" "$(STARPU_TASK_H)" >/dev/null 2>&1 && echo yes'),)
+CFLAGS += -DNBODY_HAVE_CUDA_FUNCS_NAME=1
 endif
 # ifneq ($(shell grep "STARPU_USE_OPENCL 1" $(STARPU_CONFIG)),)
 # USE_OPENCL=1

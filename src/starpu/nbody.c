@@ -35,6 +35,10 @@
 #endif
 #endif
 
+#ifndef NBODY_HAVE_CUDA_FUNCS_NAME
+#define NBODY_HAVE_CUDA_FUNCS_NAME 0
+#endif
+
 #if NBODY_USE_CUDA && !defined(STARPU_USE_CUDA)
 #error "NBODY_USE_CUDA=1 requires a StarPU build with CUDA support."
 #endif
@@ -177,9 +181,13 @@ static int configure_codelets(compute_mode_t mode,
 #if NBODY_USE_CUDA
     if (mode == MODE_GPU) {
         bodyforce_cl->cuda_funcs[0] = bodyForce_cuda;
+#if NBODY_HAVE_CUDA_FUNCS_NAME
         bodyforce_cl->cuda_funcs_name[0] = "bodyForce_cuda";
+#endif
         integrate_cl->cuda_funcs[0] = integratePositions_cuda;
+#if NBODY_HAVE_CUDA_FUNCS_NAME
         integrate_cl->cuda_funcs_name[0] = "integratePositions_cuda";
+#endif
         bodyforce_cl->where = STARPU_CUDA | NBODY_MPI_MS_MASK;
         integrate_cl->where = STARPU_CUDA | NBODY_MPI_MS_MASK;
         return 0;
@@ -190,9 +198,13 @@ static int configure_codelets(compute_mode_t mode,
         integrate_cl->cpu_funcs[0] = integratePositions_cpu;
         integrate_cl->cpu_funcs_name[0] = "integratePositions_cpu";
         bodyforce_cl->cuda_funcs[0] = bodyForce_cuda;
+#if NBODY_HAVE_CUDA_FUNCS_NAME
         bodyforce_cl->cuda_funcs_name[0] = "bodyForce_cuda";
+#endif
         integrate_cl->cuda_funcs[0] = integratePositions_cuda;
+#if NBODY_HAVE_CUDA_FUNCS_NAME
         integrate_cl->cuda_funcs_name[0] = "integratePositions_cuda";
+#endif
         bodyforce_cl->where = STARPU_CPU | STARPU_CUDA | NBODY_MPI_MS_MASK;
         integrate_cl->where = STARPU_CPU | STARPU_CUDA | NBODY_MPI_MS_MASK;
         return 0;
