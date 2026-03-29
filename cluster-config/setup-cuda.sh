@@ -181,9 +181,14 @@ write_env() {
   echo "==> [5/10] Writing environment exports to ${ENV_FILE}..."
   sudo tee "${ENV_FILE}" >/dev/null <<EOF_INNER
 # StarPU/FxT/CUDA environment (installed under ${PREFIX})
+export CUDA_HOME="${CUDA_HOME}"
 export PATH="${PREFIX}/bin:${CUDA_HOME}/bin:\$PATH"
 export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib64/pkgconfig:\${PKG_CONFIG_PATH:-}"
 export LD_LIBRARY_PATH="${PREFIX}/lib:${PREFIX}/lib64:${CUDA_HOME}/lib64:${CUDA_HOME}/lib:\${LD_LIBRARY_PATH:-}"
+export LIBRARY_PATH="${CUDA_HOME}/lib64:${CUDA_HOME}/lib:\${LIBRARY_PATH:-}"
+export CPATH="${CUDA_HOME}/include:\${CPATH:-}"
+export C_INCLUDE_PATH="${CUDA_HOME}/include:\${C_INCLUDE_PATH:-}"
+export CPLUS_INCLUDE_PATH="${CUDA_HOME}/include:\${CPLUS_INCLUDE_PATH:-}"
 
 # Enable FxT tracing by default
 export STARPU_FXT_TRACE=1
@@ -238,6 +243,7 @@ build_starpu_cuda() {
     --prefix="${PREFIX}" \
     --enable-cuda \
     --disable-opencl \
+    --disable-starpupy \
     --enable-fxt \
     --enable-mpi \
     CPPFLAGS="-I${CUDA_HOME}/include" \
