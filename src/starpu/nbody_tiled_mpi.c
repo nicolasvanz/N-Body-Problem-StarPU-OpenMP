@@ -109,6 +109,17 @@ int nbody_run_mpi_tiled(const options_t *opts,
             acc_handles[i], acc_redux_cl, acc_init_cl);
     }
 
+    for (int i = 0; i < nPartitions; i++) {
+        int owner = i % size;
+        if (owner == 0) {
+            continue;
+        }
+        starpu_mpi_data_migrate(MPI_COMM_WORLD, pos_handles[i], owner);
+        starpu_mpi_data_migrate(MPI_COMM_WORLD, vel_handles[i], owner);
+        starpu_mpi_data_migrate(MPI_COMM_WORLD, acc_handles[i], owner);
+    }
+    starpu_mpi_wait_for_all(MPI_COMM_WORLD);
+
     const int nIters = 10;
     double start = starpu_timing_now();
 
@@ -155,14 +166,17 @@ int nbody_run_mpi_tiled(const options_t *opts,
     }
 
     starpu_mpi_wait_for_all(MPI_COMM_WORLD);
-    starpu_data_unpartition_submit(acc_handle, nPartitions, acc_handles, -1);
-    starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
-    starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
+    if (rank == 0) {
+        starpu_data_unpartition_submit(acc_handle, nPartitions, acc_handles, -1);
+        starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
+        starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
+    }
     starpu_mpi_wait_for_all(MPI_COMM_WORLD);
 
     starpu_data_partition_clean(pos_handle, nPartitions, pos_handles);
     starpu_data_partition_clean(vel_handle, nPartitions, vel_handles);
     starpu_data_partition_clean(acc_handle, nPartitions, acc_handles);
+    starpu_mpi_wait_for_all(MPI_COMM_WORLD);
 
     starpu_mpi_get_data_on_node(MPI_COMM_WORLD, pos_handle, 0);
     starpu_mpi_get_data_on_node(MPI_COMM_WORLD, vel_handle, 0);

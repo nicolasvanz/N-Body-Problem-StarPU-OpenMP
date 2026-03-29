@@ -30,7 +30,6 @@ int nbody_run_mpi(const options_t *opts,
     conf.sched_policy_name = "dmda";
 
     starpu_mpi_init_conf(&argc, &argv, 1, MPI_COMM_WORLD, &conf);
-    starpu_mpi_cache_set(0);
     starpu_mpi_comm_rank(MPI_COMM_WORLD, &rank);
     starpu_mpi_comm_size(MPI_COMM_WORLD, &size);
 
@@ -86,6 +85,14 @@ int nbody_run_mpi(const options_t *opts,
         starpu_mpi_data_register(vel_handles[i], tag++, 0);
         starpu_mpi_data_register(pos_handles[i], tag++, 0);
     }
+    for (int i = 0; i < nPartitions; i++) {
+        int owner = i % size;
+        if (owner == 0) {
+            continue;
+        }
+        starpu_mpi_data_migrate(MPI_COMM_WORLD, vel_handles[i], owner);
+    }
+    starpu_mpi_wait_for_all(MPI_COMM_WORLD);
 
     const int nIters = 10;
     double start = starpu_timing_now();
@@ -114,17 +121,30 @@ int nbody_run_mpi(const options_t *opts,
                                          j % size,
                                          0);
         }
+        starpu_mpi_cache_flush(MPI_COMM_WORLD, pos_handle);
     }
 
-    starpu_task_wait_for_all();
-    starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
-    starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
-    starpu_task_wait_for_all();
+    starpu_mpi_wait_for_all(MPI_COMM_WORLD);
+    for (int i = 0; i < nPartitions; i++) {
+        int owner = i % size;
+        if (owner == 0) {
+            continue;
+        }
+        /* Repatriate updated velocity partitions before unpartition/gather. */
+        starpu_mpi_data_migrate(MPI_COMM_WORLD, vel_handles[i], 0);
+    }
+    starpu_mpi_wait_for_all(MPI_COMM_WORLD);
+    if (rank == 0) {
+        starpu_data_unpartition_submit(vel_handle, nPartitions, vel_handles, -1);
+        starpu_data_unpartition_submit(pos_handle, nPartitions, pos_handles, -1);
+    }
+    starpu_mpi_wait_for_all(MPI_COMM_WORLD);
     starpu_data_partition_clean(pos_handle, nPartitions, pos_handles);
     starpu_data_partition_clean(vel_handle, nPartitions, vel_handles);
 
     starpu_mpi_get_data_on_node(MPI_COMM_WORLD, pos_handle, 0);
     starpu_mpi_get_data_on_node(MPI_COMM_WORLD, vel_handle, 0);
+    starpu_mpi_wait_for_all(MPI_COMM_WORLD);
 
     if (rank == 0) {
         starpu_data_acquire(pos_handle, STARPU_R);
