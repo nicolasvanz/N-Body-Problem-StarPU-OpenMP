@@ -3,6 +3,11 @@ PYTHON ?= python3
 RTOL ?= 1e-3
 ATOL ?= 1e-5
 MAX_REPORT ?= 10
+PLOT_VENV ?= .venv-plots
+PLOT_PYTHON ?= $(PLOT_VENV)/bin/python
+PLOT_SCRIPT ?= scripts/plot_experiments.py
+PLOT_REQUIREMENTS ?= scripts/plot-requirements.txt
+PLOT_ARGS ?=
 
 ifeq ($(IMPL),openmp)
 SUBDIR := src/openmp
@@ -12,7 +17,7 @@ else
 $(error IMPL must be 'openmp' or 'starpu' (got '$(IMPL)'))
 endif
 
-.PHONY: all clean compare diff-txt help openmp starpu openmp-% starpu-% run run-openmp run-starpu
+.PHONY: all clean compare diff-txt help openmp starpu openmp-% starpu-% run run-openmp run-starpu plots-venv plots plots-timed plots-clean
 
 all diff-txt:
 	@$(MAKE) -C $(SUBDIR) $@
@@ -58,8 +63,26 @@ run-starpu:
 run:
 	@$(MAKE) run-$(IMPL)
 
+plots-venv:
+	@python3 -m venv $(PLOT_VENV)
+	@$(PLOT_PYTHON) -m pip install --upgrade pip
+	@$(PLOT_PYTHON) -m pip install -r $(PLOT_REQUIREMENTS)
+
+plots: plots-venv
+	@$(PLOT_PYTHON) $(PLOT_SCRIPT) $(PLOT_ARGS)
+
+plots-timed: plots-venv
+	@$(PLOT_PYTHON) $(PLOT_SCRIPT) --rep-kind timed $(PLOT_ARGS)
+
+plots-clean:
+	@if [ -d results/plots ]; then \
+		rm -f results/plots/latest; \
+		find results/plots -mindepth 1 -maxdepth 1 -type d -name '20*' -exec rm -rf {} +; \
+	fi
+
 help:
 	@echo "Usage: make IMPL={openmp|starpu} <target>"
 	@echo "Common targets: all clean compare diff-txt"
 	@echo "Shorthand: make openmp, make starpu, make openmp-<target>, make starpu-<target>"
 	@echo "Run: make run IMPL={openmp|starpu} ARGS='<program args>'"
+	@echo "Plots: make plots | make plots-timed | make plots-clean"
