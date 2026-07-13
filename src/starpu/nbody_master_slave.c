@@ -265,20 +265,26 @@ int nbody_run_master_slave_classic(const options_t *opts,
         starpu_data_partition_plan(ctx.vel_handle, &filter, ctx.vel_handles);
         ctx.partitions_planned = 1;
 
+        int use_dmda = parse_int_env("NBODY_SC_SCHED_DMDA", 0);
         const int nIters = 10;
         double start = starpu_timing_now();
 
         for (int iter = 0; iter < nIters && ret == 0; iter++) {
             for (int j = 0; j < ctx.nPartitions; j++) {
-                int workerid = ctx.remote_worker_ids[j % ctx.nRemoteWorkers];
-                ret = starpu_task_insert(bodyforce_cl,
-                                         STARPU_EXECUTE_ON_WORKER,
-                                         workerid,
-                                         STARPU_R,
-                                         ctx.pos_handle,
-                                         STARPU_RW,
-                                         ctx.vel_handles[j],
-                                         0);
+                int ins;
+                if (use_dmda)
+                    ins = starpu_task_insert(bodyforce_cl,
+                        STARPU_R, ctx.pos_handle,
+                        STARPU_RW, ctx.vel_handles[j],
+                        0);
+                else
+                    ins = starpu_task_insert(bodyforce_cl,
+                        STARPU_EXECUTE_ON_WORKER,
+                        ctx.remote_worker_ids[j % ctx.nRemoteWorkers],
+                        STARPU_R, ctx.pos_handle,
+                        STARPU_RW, ctx.vel_handles[j],
+                        0);
+                ret = ins;
                 if (ret != 0) {
                     fprintf(stderr,
                             "ERROR: bodyforce task submission failed (%d)\n",
@@ -288,15 +294,20 @@ int nbody_run_master_slave_classic(const options_t *opts,
             }
 
             for (int j = 0; j < ctx.nPartitions && ret == 0; j++) {
-                int workerid = ctx.remote_worker_ids[j % ctx.nRemoteWorkers];
-                ret = starpu_task_insert(integrate_cl,
-                                         STARPU_EXECUTE_ON_WORKER,
-                                         workerid,
-                                         STARPU_RW,
-                                         ctx.pos_handles[j],
-                                         STARPU_R,
-                                         ctx.vel_handles[j],
-                                         0);
+                int ins;
+                if (use_dmda)
+                    ins = starpu_task_insert(integrate_cl,
+                        STARPU_RW, ctx.pos_handles[j],
+                        STARPU_R, ctx.vel_handles[j],
+                        0);
+                else
+                    ins = starpu_task_insert(integrate_cl,
+                        STARPU_EXECUTE_ON_WORKER,
+                        ctx.remote_worker_ids[j % ctx.nRemoteWorkers],
+                        STARPU_RW, ctx.pos_handles[j],
+                        STARPU_R, ctx.vel_handles[j],
+                        0);
+                ret = ins;
                 if (ret != 0) {
                     fprintf(stderr,
                             "ERROR: integrate task submission failed (%d)\n",
