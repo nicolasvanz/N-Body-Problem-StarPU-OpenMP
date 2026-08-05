@@ -60,13 +60,5 @@ venv
 
 starpu.pdf
 
-cluster-config/ami-bake.env
-cluster-config/cluster-mpi.env
-cluster-config/experiments.env
-cluster-config/.cluster/
 traces/
-.venv-plots/
-results/plots/
-scripts/*__pycache__*
-!scripts/plot-requirements.txt
 
