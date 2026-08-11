@@ -150,6 +150,22 @@ static int ms_collect_workers(compute_mode_t mode,
     return 0;
 }
 
+/* Local (source-side) workers able to run this mode. These are ordinary
+ * STARPU_CPU/CUDA workers on the source, distinct from the MS sink lanes
+ * counted by ms_collect_workers. Under dmda the scheduler can place tasks on
+ * them (the codelet .where already lists STARPU_CPU/STARPU_CUDA), so a source
+ * with local workers can compute even with zero sinks. */
+static int ms_count_local_workers(compute_mode_t mode) {
+    int n = 0;
+    if (mode == MODE_CPU || mode == MODE_HYBRID) {
+        n += (int)starpu_worker_get_count_by_type(STARPU_CPU_WORKER);
+    }
+    if (mode == MODE_GPU || mode == MODE_HYBRID) {
+        n += (int)starpu_worker_get_count_by_type(STARPU_CUDA_WORKER);
+    }
+    return n;
+}
+
 int nbody_run_master_slave_classic(const options_t *opts,
                                    struct starpu_codelet *bodyforce_cl,
                                    struct starpu_codelet *integrate_cl) {
@@ -202,6 +218,8 @@ int nbody_run_master_slave_classic(const options_t *opts,
             break;
         }
 
+        int use_dmda = parse_int_env("NBODY_SC_SCHED_DMDA", 0);
+
         ret = ms_collect_workers(
             opts->mode, &ctx.remote_worker_ids, &ctx.nRemoteWorkers);
         if (ret != 0) {
@@ -210,21 +228,37 @@ int nbody_run_master_slave_classic(const options_t *opts,
             break;
         }
 
+        int nLocalCapable = ms_count_local_workers(opts->mode);
+
         if (ctx.nRemoteWorkers == 0) {
-            if (opts->mode == MODE_GPU) {
+            /* No sinks. The STARPU_EXECUTE_ON_WORKER path pins each task to a
+             * remote lane (and would divide by zero here), so source-only
+             * execution is valid only under dmda. */
+            if (!use_dmda) {
                 fprintf(stderr,
-                        "ERROR: no remote MPI_SC CUDA lanes detected. "
-                        "Check STARPU_MPI_SC_NCUDA and sink CUDA availability.\n");
-            } else {
-                fprintf(stderr,
-                        "ERROR: no compatible MPI_SC lanes detected for mode %d.\n",
-                        (int)opts->mode);
+                        "ERROR: no remote MPI_SC lanes; source-only execution "
+                        "requires dmda (set NBODY_SC_SCHED_DMDA=1).\n");
+                ret = 1;
+                break;
             }
-            ret = 1;
-            break;
+            /* Truly invalid: no sinks AND no local workers for this mode (e.g.
+             * a 2-core source that reserves both cores for coordination and
+             * keeps zero CPU workers). Nothing can run. */
+            if (nLocalCapable == 0) {
+                fprintf(stderr,
+                        "ERROR: no MPI_SC lanes and no local workers for mode %d; "
+                        "source cannot compute (check STARPU_MPI_SC_N* / source cores).\n",
+                        (int)opts->mode);
+                ret = 1;
+                break;
+            }
+            /* else: source-only baseline -- run all partitions on local
+             * workers via dmda (the c=1 source-on point). */
         }
 
-        ctx.nPartitions = opts->partitions_set ? opts->nPartitions : ctx.nRemoteWorkers;
+        int default_parts =
+            ctx.nRemoteWorkers > 0 ? ctx.nRemoteWorkers : nLocalCapable;
+        ctx.nPartitions = opts->partitions_set ? opts->nPartitions : default_parts;
         if (ctx.nPartitions <= 0 || ctx.nPartitions > ctx.nBodies) {
             fprintf(stderr,
                     "ERROR: invalid partition count %d (valid range: 1..%d)\n",
@@ -265,7 +299,6 @@ int nbody_run_master_slave_classic(const options_t *opts,
         starpu_data_partition_plan(ctx.vel_handle, &filter, ctx.vel_handles);
         ctx.partitions_planned = 1;
 
-        int use_dmda = parse_int_env("NBODY_SC_SCHED_DMDA", 0);
         const int nIters = 10;
         double start = starpu_timing_now();
 
