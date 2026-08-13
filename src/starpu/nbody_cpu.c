@@ -151,3 +151,44 @@ void bodyForce_cpu(void *buffers[], void *_args) {
         v[i].vz += dt * Fz;
     }
 }
+
+void bodyForce_partitioned_cpu(void *buffers[], void *_args) {
+    int nParts = 0;
+    starpu_codelet_unpack_args(_args, &nParts);
+
+    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[nParts]);
+    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[nParts]);
+    size_t voff = STARPU_VECTOR_GET_SLICE_BASE(buffers[nParts]);
+
+    /* self = the position slice aligned with this velocity slice */
+    Pos *self = NULL;
+    for (int k = 0; k < nParts; k++) {
+        if ((size_t)STARPU_VECTOR_GET_SLICE_BASE(buffers[k]) == voff) {
+            self = (Pos *)STARPU_VECTOR_GET_PTR(buffers[k]);
+            break;
+        }
+    }
+
+    for (unsigned i = 0; i < nVel; i++) {
+        float Fx = 0.0f, Fy = 0.0f, Fz = 0.0f;
+        Pos me = self[i];
+        for (int k = 0; k < nParts; k++) {              /* global order 0..N-1 */
+            Pos *pk = (Pos *)STARPU_VECTOR_GET_PTR(buffers[k]);
+            unsigned int nk = STARPU_VECTOR_GET_NX(buffers[k]);
+            for (unsigned j = 0; j < nk; j++) {
+                float dx = pk[j].x - me.x;
+                float dy = pk[j].y - me.y;
+                float dz = pk[j].z - me.z;
+                float distSqr = dx * dx + dy * dy + dz * dz + SOFTENING;
+                float invDist = my_rsqrtf(distSqr);
+                float invDist3 = invDist * invDist * invDist;
+                Fx += dx * invDist3;
+                Fy += dy * invDist3;
+                Fz += dz * invDist3;
+            }
+        }
+        v[i].vx += dt * Fx;
+        v[i].vy += dt * Fy;
+        v[i].vz += dt * Fz;
+    }
+}
