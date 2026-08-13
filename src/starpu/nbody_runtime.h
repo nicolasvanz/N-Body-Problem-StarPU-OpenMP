@@ -27,6 +27,9 @@ void nbody_vector_filter_block(void *parent_interface,
 void nbody_init_bodies(Pos *pos, Vel *vel, int nBodies);
 void nbody_write_debug_outputs(Pos *pos, Vel *vel, int nBodies);
 
+int nbody_finalize_partitioned_bodyforce(struct starpu_codelet *cl, int nPartitions);
+void nbody_release_partitioned_bodyforce(struct starpu_codelet *cl);
+
 int nbody_run_single(const options_t *opts,
                      struct starpu_codelet *bodyforce_cl,
                      struct starpu_codelet *integrate_cl);

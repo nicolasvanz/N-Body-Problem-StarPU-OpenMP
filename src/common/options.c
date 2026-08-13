@@ -70,6 +70,18 @@ static int parse_algorithm(const char *s, simulation_algorithm_t *algorithm) {
     return 0;
 }
 
+static int parse_force_deps(const char *s, force_deps_t *fd) {
+    if (strcmp(s, "whole") == 0 || strcmp(s, "gather") == 0) {
+        *fd = FORCE_DEPS_WHOLE;
+        return 1;
+    }
+    if (strcmp(s, "partitioned") == 0) {
+        *fd = FORCE_DEPS_PARTITIONED;
+        return 1;
+    }
+    return 0;
+}
+
 #if USE_MPI
 static int env_indicates_mpi(void) {
     const char *vars[] = {
@@ -106,6 +118,10 @@ static simulation_algorithm_t default_algorithm(void) {
     return ALGO_CLASSIC;
 }
 
+static force_deps_t default_force_deps(void) {
+    return FORCE_DEPS_WHOLE;
+}
+
 void print_usage(const char *prog) {
     fprintf(stderr,
             "Usage: %s [options] [exp]\n"
@@ -125,6 +141,8 @@ void print_usage(const char *prog) {
             "  -a, --algo <type>       Algorithm: classic or tiled\n"
             "  --classic               Shorthand for --algo classic\n"
             "  --tiled                 Shorthand for --algo tiled\n"
+            "  --force-deps <whole|partitioned>  bodyforce reads whole pos array (whole, default)\n"
+            "                                    or the position partitions (partitioned; --classic only)\n"
             "  -h, --help              Show this help\n"
             "\n"
             "Legacy:\n"
@@ -225,6 +243,13 @@ int parse_options(int argc, char **argv, options_t *opts) {
             opts->algorithm_set = 1;
             continue;
         }
+        if (strcmp(arg, "--force-deps") == 0) {
+            if (i + 1 >= argc || !parse_force_deps(argv[++i], &opts->force_deps)) {
+                return -1;
+            }
+            opts->force_deps_set = 1;
+            continue;
+        }
         if (arg[0] == '-') {
             return -1;
         }
@@ -254,6 +279,20 @@ int parse_options(int argc, char **argv, options_t *opts) {
     }
     if (!opts->algorithm_set) {
         opts->algorithm = default_algorithm();
+    }
+    if (!opts->force_deps_set) {
+        opts->force_deps = default_force_deps();
+    }
+
+    if (opts->force_deps == FORCE_DEPS_PARTITIONED) {
+        if (opts->algorithm == ALGO_TILED) {
+            fprintf(stderr, "ERROR: --force-deps partitioned is only valid with --classic\n");
+            return -1;
+        }
+        if (opts->backend == BACKEND_SINGLE) {
+            fprintf(stderr, "ERROR: --force-deps partitioned is not supported by --single (use --mpi or --master-slave)\n");
+            return -1;
+        }
     }
 
     return 0;

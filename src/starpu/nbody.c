@@ -54,6 +54,7 @@ extern void clearAcceleration_cpu(void *buffers[], void *_args);
 extern void reduceAcceleration_cpu(void *buffers[], void *_args);
 extern void bodyForce_tile_cpu(void *buffers[], void *_args);
 extern void integratePositions_tiled_cpu(void *buffers[], void *_args);
+extern void bodyForce_partitioned_cpu(void *buffers[], void *_args);
 #if NBODY_USE_CUDA
 extern void clearAcceleration_cuda(void *buffers[], void *_args);
 extern void reduceAcceleration_cuda(void *buffers[], void *_args);
@@ -61,10 +62,14 @@ extern void bodyForce_cuda(void *buffers[], void *_args);
 extern void integratePositions_cuda(void *buffers[], void *_args);
 extern void bodyForce_tile_cuda(void *buffers[], void *_args);
 extern void integratePositions_tiled_cuda(void *buffers[], void *_args);
+extern void bodyForce_partitioned_cuda(void *buffers[], void *_args);
 #endif
 
 static struct starpu_perfmodel bodyforce_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "bodyforce"};
+
+static struct starpu_perfmodel bodyforce_part_perfmodel = {
+    .type = STARPU_HISTORY_BASED, .symbol = "bodyforce_part"};
 
 static struct starpu_perfmodel integratepositions_perfmodel = {
     .type = STARPU_HISTORY_BASED, .symbol = "integratepositions"};
@@ -152,16 +157,24 @@ void nbody_write_debug_outputs(Pos *pos, Vel *vel, int nBodies) {
 #endif
 }
 
-static int configure_codelets(compute_mode_t mode,
-                              struct starpu_codelet *bodyforce_cl,
-                              struct starpu_codelet *integrate_cl) {
+static int configure_classic_codelets(compute_mode_t mode,
+                                      force_deps_t force_deps,
+                                      struct starpu_codelet *bodyforce_cl,
+                                      struct starpu_codelet *integrate_cl) {
     memset(bodyforce_cl, 0, sizeof(*bodyforce_cl));
     memset(integrate_cl, 0, sizeof(*integrate_cl));
 
-    bodyforce_cl->nbuffers = 2;
-    bodyforce_cl->modes[0] = STARPU_R;
-    bodyforce_cl->modes[1] = STARPU_RW;
-    bodyforce_cl->model = &bodyforce_perfmodel;
+    int partitioned = (force_deps == FORCE_DEPS_PARTITIONED);
+
+    bodyforce_cl->model = partitioned ? &bodyforce_part_perfmodel : &bodyforce_perfmodel;
+    if (!partitioned) {
+        bodyforce_cl->nbuffers = 2;
+        bodyforce_cl->modes[0] = STARPU_R;
+        bodyforce_cl->modes[1] = STARPU_RW;
+    }
+    /* When partitioned, nbuffers/modes are left to
+     * nbody_finalize_partitioned_bodyforce(), called once nPartitions is
+     * known (see nbody_master_slave.c / nbody_mpi.c). */
 
     integrate_cl->nbuffers = 2;
     integrate_cl->modes[0] = STARPU_RW;
@@ -169,8 +182,9 @@ static int configure_codelets(compute_mode_t mode,
     integrate_cl->model = &integratepositions_perfmodel;
 
     if (mode == MODE_CPU) {
-        bodyforce_cl->cpu_funcs[0] = bodyForce_cpu;
-        bodyforce_cl->cpu_funcs_name[0] = "bodyForce_cpu";
+        bodyforce_cl->cpu_funcs[0] = partitioned ? bodyForce_partitioned_cpu : bodyForce_cpu;
+        bodyforce_cl->cpu_funcs_name[0] =
+            partitioned ? "bodyForce_partitioned_cpu" : "bodyForce_cpu";
         integrate_cl->cpu_funcs[0] = integratePositions_cpu;
         integrate_cl->cpu_funcs_name[0] = "integratePositions_cpu";
         bodyforce_cl->where = STARPU_CPU | NBODY_MPI_MS_MASK;
@@ -180,9 +194,10 @@ static int configure_codelets(compute_mode_t mode,
 
 #if NBODY_USE_CUDA
     if (mode == MODE_GPU) {
-        bodyforce_cl->cuda_funcs[0] = bodyForce_cuda;
+        bodyforce_cl->cuda_funcs[0] = partitioned ? bodyForce_partitioned_cuda : bodyForce_cuda;
 #if NBODY_HAVE_CUDA_FUNCS_NAME
-        bodyforce_cl->cuda_funcs_name[0] = "bodyForce_cuda";
+        bodyforce_cl->cuda_funcs_name[0] =
+            partitioned ? "bodyForce_partitioned_cuda" : "bodyForce_cuda";
 #endif
         integrate_cl->cuda_funcs[0] = integratePositions_cuda;
 #if NBODY_HAVE_CUDA_FUNCS_NAME
@@ -193,13 +208,15 @@ static int configure_codelets(compute_mode_t mode,
         return 0;
     }
     if (mode == MODE_HYBRID) {
-        bodyforce_cl->cpu_funcs[0] = bodyForce_cpu;
-        bodyforce_cl->cpu_funcs_name[0] = "bodyForce_cpu";
+        bodyforce_cl->cpu_funcs[0] = partitioned ? bodyForce_partitioned_cpu : bodyForce_cpu;
+        bodyforce_cl->cpu_funcs_name[0] =
+            partitioned ? "bodyForce_partitioned_cpu" : "bodyForce_cpu";
         integrate_cl->cpu_funcs[0] = integratePositions_cpu;
         integrate_cl->cpu_funcs_name[0] = "integratePositions_cpu";
-        bodyforce_cl->cuda_funcs[0] = bodyForce_cuda;
+        bodyforce_cl->cuda_funcs[0] = partitioned ? bodyForce_partitioned_cuda : bodyForce_cuda;
 #if NBODY_HAVE_CUDA_FUNCS_NAME
-        bodyforce_cl->cuda_funcs_name[0] = "bodyForce_cuda";
+        bodyforce_cl->cuda_funcs_name[0] =
+            partitioned ? "bodyForce_partitioned_cuda" : "bodyForce_cuda";
 #endif
         integrate_cl->cuda_funcs[0] = integratePositions_cuda;
 #if NBODY_HAVE_CUDA_FUNCS_NAME
@@ -214,6 +231,31 @@ static int configure_codelets(compute_mode_t mode,
 #endif
 
     return -1;
+}
+
+int nbody_finalize_partitioned_bodyforce(struct starpu_codelet *cl, int nPartitions) {
+    int nb = nPartitions + 1;
+    cl->nbuffers = nb;
+    if (nb <= STARPU_NMAXBUFS) {
+        for (int k = 0; k < nPartitions; k++) cl->modes[k] = STARPU_R;
+        cl->modes[nPartitions] = STARPU_RW;
+        cl->dyn_modes = NULL;
+    } else {
+        enum starpu_data_access_mode *m =
+            (enum starpu_data_access_mode *)malloc(nb * sizeof(*m));
+        if (m == NULL) return -1;
+        for (int k = 0; k < nPartitions; k++) m[k] = STARPU_R;
+        m[nPartitions] = STARPU_RW;
+        cl->dyn_modes = m;
+    }
+    return 0;
+}
+
+void nbody_release_partitioned_bodyforce(struct starpu_codelet *cl) {
+    if (cl->dyn_modes != NULL) {
+        free(cl->dyn_modes);
+        cl->dyn_modes = NULL;
+    }
 }
 
 static int configure_tiled_codelets(backend_t backend,
@@ -306,11 +348,13 @@ int main(int argc, char **argv) {
         .mode = MODE_CPU,
         .backend = BACKEND_SINGLE,
         .algorithm = ALGO_CLASSIC,
+        .force_deps = FORCE_DEPS_WHOLE,
         .show_help = 0,
         .backend_set = 0,
         .mode_set = 0,
         .partitions_set = 0,
         .algorithm_set = 0,
+        .force_deps_set = 0,
     };
 
     if (parse_options(argc, argv, &opts) != 0 || opts.show_help) {
@@ -369,7 +413,7 @@ int main(int argc, char **argv) {
 
     struct starpu_codelet bodyforce_cl;
     struct starpu_codelet integrate_cl;
-    if (configure_codelets(opts.mode, &bodyforce_cl, &integrate_cl) != 0) {
+    if (configure_classic_codelets(opts.mode, opts.force_deps, &bodyforce_cl, &integrate_cl) != 0) {
         fprintf(stderr, "ERROR: failed to configure StarPU codelets.\n");
         return 1;
     }

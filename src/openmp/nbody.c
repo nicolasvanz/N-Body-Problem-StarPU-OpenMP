@@ -290,11 +290,13 @@ int main(int argc, char **argv) {
         .mode = MODE_CPU,
         .backend = BACKEND_SINGLE,
         .algorithm = ALGO_CLASSIC,
+        .force_deps = FORCE_DEPS_WHOLE,
         .show_help = 0,
         .backend_set = 0,
         .mode_set = 0,
         .partitions_set = 0,
         .algorithm_set = 0,
+        .force_deps_set = 0,
     };
 
     if (parse_options(argc, argv, &opts) != 0 || opts.show_help) {
