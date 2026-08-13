@@ -15,6 +15,7 @@
  */
 
 #include <starpu.h>
+#include <assert.h>
 #include <stdio.h>
 
 #include "../../include/body.h"
@@ -168,6 +169,7 @@ void bodyForce_partitioned_cpu(void *buffers[], void *_args) {
             break;
         }
     }
+    assert(self != NULL);
 
     for (unsigned i = 0; i < nVel; i++) {
         float Fx = 0.0f, Fy = 0.0f, Fz = 0.0f;

@@ -16,6 +16,8 @@
 
 #include <starpu.h>
 
+#include <assert.h>
+
 #include <atomic>
 #include <cstdlib>
 
@@ -264,6 +266,7 @@ extern "C" void bodyForce_partitioned_cuda(void *buffers[], void *_args) {
         h_nx[k] = (int)STARPU_VECTOR_GET_NX(buffers[k]);
         if ((size_t)STARPU_VECTOR_GET_SLICE_BASE(buffers[k]) == voff) self = h_ptrs[k];
     }
+    assert(self != NULL);
 
     cudaStream_t stream = starpu_cuda_get_local_stream();
     Pos **d_ptrs = NULL;
