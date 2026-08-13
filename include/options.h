@@ -18,17 +18,24 @@ typedef enum {
     ALGO_TILED = 1,
 } simulation_algorithm_t;
 
+typedef enum {
+    FORCE_DEPS_WHOLE = 0,
+    FORCE_DEPS_PARTITIONED = 1,
+} force_deps_t;
+
 typedef struct {
     int nBodies;
     int nPartitions;
     compute_mode_t mode;
     backend_t backend;
     simulation_algorithm_t algorithm;
+    force_deps_t force_deps;
     int show_help;
     int backend_set;
     int mode_set;
     int partitions_set;
     int algorithm_set;
+    int force_deps_set;
 } options_t;
 
 void print_usage(const char *prog);
