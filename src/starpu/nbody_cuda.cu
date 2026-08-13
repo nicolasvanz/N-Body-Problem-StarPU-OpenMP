@@ -17,6 +17,7 @@
 #include <starpu.h>
 
 #include <atomic>
+#include <cstdlib>
 
 #include "../../include/body.h"
 
@@ -91,6 +92,34 @@ bodyForce(Pos *p, Vel *v, int nPos, int nVel, int offset) {
             Fz += dz * invDist3;
         }
 
+        v[i].vx += dt * Fx;
+        v[i].vy += dt * Fy;
+        v[i].vz += dt * Fz;
+    }
+}
+
+static __global__ void bodyForcePartitioned(
+    Pos **slices, const int *slice_nx, int nParts, const Pos *self, Vel *v, int nVel) {
+    int initialIndex = threadIdx.x + blockIdx.x * blockDim.x;
+    int stride = blockDim.x * gridDim.x;
+    for (int i = initialIndex; i < nVel; i += stride) {
+        float Fx = 0.0f, Fy = 0.0f, Fz = 0.0f;
+        Pos me = self[i];
+        for (int k = 0; k < nParts; k++) {              /* global order 0..N-1 */
+            const Pos *pk = slices[k];
+            int nk = slice_nx[k];
+            for (int j = 0; j < nk; j++) {
+                float dx = pk[j].x - me.x;
+                float dy = pk[j].y - me.y;
+                float dz = pk[j].z - me.z;
+                float distSqr = dx * dx + dy * dy + dz * dz + SOFTENING;
+                float invDist = rsqrtf(distSqr);
+                float invDist3 = invDist * invDist * invDist;
+                Fx += dx * invDist3;
+                Fy += dy * invDist3;
+                Fz += dz * invDist3;
+            }
+        }
         v[i].vx += dt * Fx;
         v[i].vy += dt * Fy;
         v[i].vz += dt * Fz;
@@ -214,6 +243,45 @@ extern "C" void bodyForce_cuda(void *buffers[], void *_args) {
                 starpu_cuda_get_local_stream()>>>(p, v, nPos, nVel, offset);
 
     cudaStreamSynchronize(starpu_cuda_get_local_stream());
+}
+
+extern "C" void bodyForce_partitioned_cuda(void *buffers[], void *_args) {
+    int nParts = 0;
+    starpu_codelet_unpack_args(_args, &nParts);
+
+    Vel *v = (Vel *)STARPU_VECTOR_GET_PTR(buffers[nParts]);
+    unsigned int nVel = STARPU_VECTOR_GET_NX(buffers[nParts]);
+    size_t voff = STARPU_VECTOR_GET_SLICE_BASE(buffers[nParts]);
+
+    /* Heap-allocated: nParts can exceed STARPU_NMAXBUFS when --enable-maxbuffers
+     * is raised for large partition counts, so stack arrays sized to the
+     * compiled STARPU_NMAXBUFS would not be safe here. */
+    Pos **h_ptrs = (Pos **)malloc(nParts * sizeof(Pos *));
+    int *h_nx = (int *)malloc(nParts * sizeof(int));
+    Pos *self = NULL;
+    for (int k = 0; k < nParts; k++) {
+        h_ptrs[k] = (Pos *)STARPU_VECTOR_GET_PTR(buffers[k]);
+        h_nx[k] = (int)STARPU_VECTOR_GET_NX(buffers[k]);
+        if ((size_t)STARPU_VECTOR_GET_SLICE_BASE(buffers[k]) == voff) self = h_ptrs[k];
+    }
+
+    cudaStream_t stream = starpu_cuda_get_local_stream();
+    Pos **d_ptrs = NULL;
+    int *d_nx = NULL;
+    cudaMalloc((void **)&d_ptrs, nParts * sizeof(Pos *));
+    cudaMalloc((void **)&d_nx, nParts * sizeof(int));
+    cudaMemcpyAsync(d_ptrs, h_ptrs, nParts * sizeof(Pos *), cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(d_nx, h_nx, nParts * sizeof(int), cudaMemcpyHostToDevice, stream);
+
+    unsigned int tpb = cuda_threads_per_block(bodyForce, &bodyforce_threads);
+    unsigned int nblocks = cuda_nblocks(nVel, tpb);
+    bodyForcePartitioned<<<nblocks, tpb, 0, stream>>>(d_ptrs, d_nx, nParts, self, v, (int)nVel);
+
+    cudaStreamSynchronize(stream); /* ensure kernel consumed the temp arrays before free */
+    cudaFree(d_ptrs);
+    cudaFree(d_nx);
+    free(h_ptrs);
+    free(h_nx);
 }
 
 extern "C" void bodyForce_tile_cuda(void *buffers[], void *_args) {
