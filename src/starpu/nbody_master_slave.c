@@ -172,6 +172,8 @@ int nbody_run_master_slave_classic(const options_t *opts,
     int ret = 0;
     int rank = current_mpi_rank();
     int server_rank = parse_int_env("STARPU_MPI_SERVER_NODE", 0);
+    int partitioned = (opts->force_deps == FORCE_DEPS_PARTITIONED);
+    struct starpu_data_descr *bf_descr = NULL;
 
     ms_context_t ctx = {
         .nBodies = opts->nBodies,
@@ -299,24 +301,57 @@ int nbody_run_master_slave_classic(const options_t *opts,
         starpu_data_partition_plan(ctx.vel_handle, &filter, ctx.vel_handles);
         ctx.partitions_planned = 1;
 
+        if (partitioned) {
+            if (nbody_finalize_partitioned_bodyforce(bodyforce_cl, ctx.nPartitions) != 0) {
+                fprintf(stderr, "ERROR: failed to allocate partitioned bodyforce modes\n");
+                ret = 1;
+                break;
+            }
+            bf_descr = (struct starpu_data_descr *)malloc(
+                (ctx.nPartitions + 1) * sizeof(*bf_descr));
+            if (bf_descr == NULL) {
+                fprintf(stderr, "ERROR: allocation failed for bodyforce descriptors\n");
+                ret = 1;
+                break;
+            }
+            for (int k = 0; k < ctx.nPartitions; k++) {
+                bf_descr[k].handle = ctx.pos_handles[k];
+                bf_descr[k].mode = STARPU_R;
+            }
+        }
+
         const int nIters = 10;
         double start = starpu_timing_now();
 
         for (int iter = 0; iter < nIters && ret == 0; iter++) {
             for (int j = 0; j < ctx.nPartitions; j++) {
                 int ins;
-                if (use_dmda)
+                if (partitioned) {
+                    bf_descr[ctx.nPartitions].handle = ctx.vel_handles[j];
+                    bf_descr[ctx.nPartitions].mode = STARPU_RW;
+                    if (use_dmda)
+                        ins = starpu_task_insert(bodyforce_cl,
+                            STARPU_DATA_MODE_ARRAY, bf_descr, ctx.nPartitions + 1,
+                            STARPU_VALUE, &ctx.nPartitions, sizeof(ctx.nPartitions), 0);
+                    else
+                        ins = starpu_task_insert(bodyforce_cl,
+                            STARPU_EXECUTE_ON_WORKER,
+                            ctx.remote_worker_ids[j % ctx.nRemoteWorkers],
+                            STARPU_DATA_MODE_ARRAY, bf_descr, ctx.nPartitions + 1,
+                            STARPU_VALUE, &ctx.nPartitions, sizeof(ctx.nPartitions), 0);
+                } else if (use_dmda) {
                     ins = starpu_task_insert(bodyforce_cl,
                         STARPU_R, ctx.pos_handle,
                         STARPU_RW, ctx.vel_handles[j],
                         0);
-                else
+                } else {
                     ins = starpu_task_insert(bodyforce_cl,
                         STARPU_EXECUTE_ON_WORKER,
                         ctx.remote_worker_ids[j % ctx.nRemoteWorkers],
                         STARPU_R, ctx.pos_handle,
                         STARPU_RW, ctx.vel_handles[j],
                         0);
+                }
                 ret = ins;
                 if (ret != 0) {
                     fprintf(stderr,
@@ -386,6 +421,13 @@ int nbody_run_master_slave_classic(const options_t *opts,
         starpu_data_release(ctx.pos_handle);
         starpu_data_release(ctx.vel_handle);
     } while (0);
+
+    if (bf_descr != NULL) {
+        free(bf_descr);
+    }
+    if (partitioned) {
+        nbody_release_partitioned_bodyforce(bodyforce_cl);
+    }
 
     ms_context_cleanup(&ctx);
     return ret;
