@@ -13,6 +13,8 @@ typedef struct {
     int starpu_initialized;
     int partitions_planned;
     int partitions_cleaned;
+    int sync_partition;   /* 1 = synchronous partition/unpartition (partitioned mode);
+                             0 = asynchronous partition_plan/partition_clean (whole mode) */
     Pos *pos;
     Vel *vel;
     starpu_data_handle_t pos_handle;
@@ -83,10 +85,15 @@ static void ms_context_cleanup(ms_context_t *ctx) {
             ctx->pos_handles != NULL && ctx->vel_handles != NULL &&
             ctx->pos_handle != 0 && ctx->vel_handle != 0 && ctx->nPartitions > 0) {
             starpu_task_wait_for_all();
-            starpu_data_partition_clean(
-                ctx->pos_handle, ctx->nPartitions, ctx->pos_handles);
-            starpu_data_partition_clean(
-                ctx->vel_handle, ctx->nPartitions, ctx->vel_handles);
+            if (ctx->sync_partition) {
+                starpu_data_unpartition(ctx->pos_handle, STARPU_MAIN_RAM);
+                starpu_data_unpartition(ctx->vel_handle, STARPU_MAIN_RAM);
+            } else {
+                starpu_data_partition_clean(
+                    ctx->pos_handle, ctx->nPartitions, ctx->pos_handles);
+                starpu_data_partition_clean(
+                    ctx->vel_handle, ctx->nPartitions, ctx->vel_handles);
+            }
         }
     }
 
@@ -181,6 +188,7 @@ int nbody_run_master_slave_classic(const options_t *opts,
         .starpu_initialized = 0,
         .partitions_planned = 0,
         .partitions_cleaned = 0,
+        .sync_partition = 0,
         .pos = NULL,
         .vel = NULL,
         .pos_handle = 0,
@@ -297,8 +305,29 @@ int nbody_run_master_slave_classic(const options_t *opts,
 
         struct starpu_data_filter filter = {
             .filter_func = nbody_vector_filter_block, .nchildren = ctx.nPartitions};
-        starpu_data_partition_plan(ctx.pos_handle, &filter, ctx.pos_handles);
-        starpu_data_partition_plan(ctx.vel_handle, &filter, ctx.vel_handles);
+        if (partitioned) {
+            /* Partitioned mode only ever accesses the children (bodyforce reads
+             * all pos slices, integrate writes them) -- it never touches the
+             * parent during the iterations. So it does NOT need asynchronous
+             * partitioning (whose purpose is to let parent and children coexist,
+             * which whole mode requires). Use the synchronous API: it makes the
+             * children the sole active view and, at teardown, starpu_data_unpartition
+             * blocks until all tasks AND transfers drain -- deterministically,
+             * across every sink memory node. This avoids the multi-sink race where
+             * the asynchronous starpu_data_partition_clean unregisters a child whose
+             * dmda prefetch on a sink replicate hasn't been accounted yet
+             * (_starpu_data_unregister: nb_tasks_prefetch assert). */
+            starpu_data_partition(ctx.pos_handle, &filter);
+            starpu_data_partition(ctx.vel_handle, &filter);
+            for (int k = 0; k < ctx.nPartitions; k++) {
+                ctx.pos_handles[k] = starpu_data_get_sub_data(ctx.pos_handle, 1, k);
+                ctx.vel_handles[k] = starpu_data_get_sub_data(ctx.vel_handle, 1, k);
+            }
+            ctx.sync_partition = 1;
+        } else {
+            starpu_data_partition_plan(ctx.pos_handle, &filter, ctx.pos_handles);
+            starpu_data_partition_plan(ctx.vel_handle, &filter, ctx.vel_handles);
+        }
         ctx.partitions_planned = 1;
 
         if (partitioned) {
@@ -394,23 +423,32 @@ int nbody_run_master_slave_classic(const options_t *opts,
             break;
         }
 
-        starpu_data_unpartition_submit(
-            ctx.vel_handle, ctx.nPartitions, ctx.vel_handles, -1);
-        starpu_data_unpartition_submit(
-            ctx.pos_handle, ctx.nPartitions, ctx.pos_handles, -1);
-        ret = starpu_task_wait_for_all();
-        if (ret != 0) {
-            fprintf(stderr,
-                    "ERROR: starpu_task_wait_for_all after unpartition failed (%d)\n",
-                    ret);
-            break;
-        }
+        if (ctx.sync_partition) {
+            /* Synchronous gather: blocks until every task and transfer on the
+             * data has drained on all nodes, then removes the children. No
+             * asynchronous partition_clean, so no prefetch-accounting race. */
+            starpu_data_unpartition(ctx.pos_handle, STARPU_MAIN_RAM);
+            starpu_data_unpartition(ctx.vel_handle, STARPU_MAIN_RAM);
+            ctx.partitions_cleaned = 1;
+        } else {
+            starpu_data_unpartition_submit(
+                ctx.vel_handle, ctx.nPartitions, ctx.vel_handles, -1);
+            starpu_data_unpartition_submit(
+                ctx.pos_handle, ctx.nPartitions, ctx.pos_handles, -1);
+            ret = starpu_task_wait_for_all();
+            if (ret != 0) {
+                fprintf(stderr,
+                        "ERROR: starpu_task_wait_for_all after unpartition failed (%d)\n",
+                        ret);
+                break;
+            }
 
-        starpu_data_partition_clean(
-            ctx.pos_handle, ctx.nPartitions, ctx.pos_handles);
-        starpu_data_partition_clean(
-            ctx.vel_handle, ctx.nPartitions, ctx.vel_handles);
-        ctx.partitions_cleaned = 1;
+            starpu_data_partition_clean(
+                ctx.pos_handle, ctx.nPartitions, ctx.pos_handles);
+            starpu_data_partition_clean(
+                ctx.vel_handle, ctx.nPartitions, ctx.vel_handles);
+            ctx.partitions_cleaned = 1;
+        }
 
         starpu_data_acquire(ctx.pos_handle, STARPU_R);
         starpu_data_acquire(ctx.vel_handle, STARPU_R);
