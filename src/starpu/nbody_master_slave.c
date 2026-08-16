@@ -13,8 +13,6 @@ typedef struct {
     int starpu_initialized;
     int partitions_planned;
     int partitions_cleaned;
-    int sync_partition;   /* 1 = synchronous partition/unpartition (partitioned mode);
-                             0 = asynchronous partition_plan/partition_clean (whole mode) */
     Pos *pos;
     Vel *vel;
     starpu_data_handle_t pos_handle;
@@ -85,15 +83,8 @@ static void ms_context_cleanup(ms_context_t *ctx) {
             ctx->pos_handles != NULL && ctx->vel_handles != NULL &&
             ctx->pos_handle != 0 && ctx->vel_handle != 0 && ctx->nPartitions > 0) {
             starpu_task_wait_for_all();
-            if (ctx->sync_partition) {
-                starpu_data_unpartition(ctx->pos_handle, STARPU_MAIN_RAM);
-                starpu_data_unpartition(ctx->vel_handle, STARPU_MAIN_RAM);
-            } else {
-                starpu_data_partition_clean(
-                    ctx->pos_handle, ctx->nPartitions, ctx->pos_handles);
-                starpu_data_partition_clean(
-                    ctx->vel_handle, ctx->nPartitions, ctx->vel_handles);
-            }
+            starpu_data_unpartition(ctx->pos_handle, STARPU_MAIN_RAM);
+            starpu_data_unpartition(ctx->vel_handle, STARPU_MAIN_RAM);
         }
     }
 
@@ -179,7 +170,6 @@ int nbody_run_master_slave_classic(const options_t *opts,
     int ret = 0;
     int rank = current_mpi_rank();
     int server_rank = parse_int_env("STARPU_MPI_SERVER_NODE", 0);
-    int partitioned = (opts->force_deps == FORCE_DEPS_PARTITIONED);
     struct starpu_data_descr *bf_descr = NULL;
 
     ms_context_t ctx = {
@@ -188,7 +178,6 @@ int nbody_run_master_slave_classic(const options_t *opts,
         .starpu_initialized = 0,
         .partitions_planned = 0,
         .partitions_cleaned = 0,
-        .sync_partition = 0,
         .pos = NULL,
         .vel = NULL,
         .pos_handle = 0,
@@ -305,48 +294,36 @@ int nbody_run_master_slave_classic(const options_t *opts,
 
         struct starpu_data_filter filter = {
             .filter_func = nbody_vector_filter_block, .nchildren = ctx.nPartitions};
-        if (partitioned) {
-            /* Partitioned mode only ever accesses the children (bodyforce reads
-             * all pos slices, integrate writes them) -- it never touches the
-             * parent during the iterations. So it does NOT need asynchronous
-             * partitioning (whose purpose is to let parent and children coexist,
-             * which whole mode requires). Use the synchronous API: it makes the
-             * children the sole active view and, at teardown, starpu_data_unpartition
-             * blocks until all tasks AND transfers drain -- deterministically,
-             * across every sink memory node. This avoids the multi-sink race where
-             * the asynchronous starpu_data_partition_clean unregisters a child whose
-             * dmda prefetch on a sink replicate hasn't been accounted yet
-             * (_starpu_data_unregister: nb_tasks_prefetch assert). */
-            starpu_data_partition(ctx.pos_handle, &filter);
-            starpu_data_partition(ctx.vel_handle, &filter);
-            for (int k = 0; k < ctx.nPartitions; k++) {
-                ctx.pos_handles[k] = starpu_data_get_sub_data(ctx.pos_handle, 1, k);
-                ctx.vel_handles[k] = starpu_data_get_sub_data(ctx.vel_handle, 1, k);
-            }
-            ctx.sync_partition = 1;
-        } else {
-            starpu_data_partition_plan(ctx.pos_handle, &filter, ctx.pos_handles);
-            starpu_data_partition_plan(ctx.vel_handle, &filter, ctx.vel_handles);
+        /* Partitioned-only: bodyforce reads all pos slices, integrate writes them --
+         * the parent is never accessed during the iterations. Synchronous partitioning
+         * makes the children the sole active view and, at teardown, starpu_data_unpartition
+         * blocks until all tasks AND transfers drain deterministically across every sink
+         * memory node -- avoiding the multi-sink race where asynchronous
+         * starpu_data_partition_clean unregisters a child whose dmda prefetch on a sink
+         * replicate hasn't been accounted yet (_starpu_data_unregister: nb_tasks_prefetch). */
+        starpu_data_partition(ctx.pos_handle, &filter);
+        starpu_data_partition(ctx.vel_handle, &filter);
+        for (int k = 0; k < ctx.nPartitions; k++) {
+            ctx.pos_handles[k] = starpu_data_get_sub_data(ctx.pos_handle, 1, k);
+            ctx.vel_handles[k] = starpu_data_get_sub_data(ctx.vel_handle, 1, k);
         }
         ctx.partitions_planned = 1;
 
-        if (partitioned) {
-            if (nbody_finalize_partitioned_bodyforce(bodyforce_cl, ctx.nPartitions) != 0) {
-                fprintf(stderr, "ERROR: failed to allocate partitioned bodyforce modes\n");
-                ret = 1;
-                break;
-            }
-            bf_descr = (struct starpu_data_descr *)malloc(
-                (ctx.nPartitions + 1) * sizeof(*bf_descr));
-            if (bf_descr == NULL) {
-                fprintf(stderr, "ERROR: allocation failed for bodyforce descriptors\n");
-                ret = 1;
-                break;
-            }
-            for (int k = 0; k < ctx.nPartitions; k++) {
-                bf_descr[k].handle = ctx.pos_handles[k];
-                bf_descr[k].mode = STARPU_R;
-            }
+        if (nbody_finalize_partitioned_bodyforce(bodyforce_cl, ctx.nPartitions) != 0) {
+            fprintf(stderr, "ERROR: failed to allocate partitioned bodyforce modes\n");
+            ret = 1;
+            break;
+        }
+        bf_descr = (struct starpu_data_descr *)malloc(
+            (ctx.nPartitions + 1) * sizeof(*bf_descr));
+        if (bf_descr == NULL) {
+            fprintf(stderr, "ERROR: allocation failed for bodyforce descriptors\n");
+            ret = 1;
+            break;
+        }
+        for (int k = 0; k < ctx.nPartitions; k++) {
+            bf_descr[k].handle = ctx.pos_handles[k];
+            bf_descr[k].mode = STARPU_R;
         }
 
         const int nIters = 10;
@@ -355,32 +332,18 @@ int nbody_run_master_slave_classic(const options_t *opts,
         for (int iter = 0; iter < nIters && ret == 0; iter++) {
             for (int j = 0; j < ctx.nPartitions; j++) {
                 int ins;
-                if (partitioned) {
-                    bf_descr[ctx.nPartitions].handle = ctx.vel_handles[j];
-                    bf_descr[ctx.nPartitions].mode = STARPU_RW;
-                    if (use_dmda)
-                        ins = starpu_task_insert(bodyforce_cl,
-                            STARPU_DATA_MODE_ARRAY, bf_descr, ctx.nPartitions + 1,
-                            STARPU_VALUE, &ctx.nPartitions, sizeof(ctx.nPartitions), 0);
-                    else
-                        ins = starpu_task_insert(bodyforce_cl,
-                            STARPU_EXECUTE_ON_WORKER,
-                            ctx.remote_worker_ids[j % ctx.nRemoteWorkers],
-                            STARPU_DATA_MODE_ARRAY, bf_descr, ctx.nPartitions + 1,
-                            STARPU_VALUE, &ctx.nPartitions, sizeof(ctx.nPartitions), 0);
-                } else if (use_dmda) {
+                bf_descr[ctx.nPartitions].handle = ctx.vel_handles[j];
+                bf_descr[ctx.nPartitions].mode = STARPU_RW;
+                if (use_dmda)
                     ins = starpu_task_insert(bodyforce_cl,
-                        STARPU_R, ctx.pos_handle,
-                        STARPU_RW, ctx.vel_handles[j],
-                        0);
-                } else {
+                        STARPU_DATA_MODE_ARRAY, bf_descr, ctx.nPartitions + 1,
+                        STARPU_VALUE, &ctx.nPartitions, sizeof(ctx.nPartitions), 0);
+                else
                     ins = starpu_task_insert(bodyforce_cl,
                         STARPU_EXECUTE_ON_WORKER,
                         ctx.remote_worker_ids[j % ctx.nRemoteWorkers],
-                        STARPU_R, ctx.pos_handle,
-                        STARPU_RW, ctx.vel_handles[j],
-                        0);
-                }
+                        STARPU_DATA_MODE_ARRAY, bf_descr, ctx.nPartitions + 1,
+                        STARPU_VALUE, &ctx.nPartitions, sizeof(ctx.nPartitions), 0);
                 ret = ins;
                 if (ret != 0) {
                     fprintf(stderr,
@@ -423,32 +386,12 @@ int nbody_run_master_slave_classic(const options_t *opts,
             break;
         }
 
-        if (ctx.sync_partition) {
-            /* Synchronous gather: blocks until every task and transfer on the
-             * data has drained on all nodes, then removes the children. No
-             * asynchronous partition_clean, so no prefetch-accounting race. */
-            starpu_data_unpartition(ctx.pos_handle, STARPU_MAIN_RAM);
-            starpu_data_unpartition(ctx.vel_handle, STARPU_MAIN_RAM);
-            ctx.partitions_cleaned = 1;
-        } else {
-            starpu_data_unpartition_submit(
-                ctx.vel_handle, ctx.nPartitions, ctx.vel_handles, -1);
-            starpu_data_unpartition_submit(
-                ctx.pos_handle, ctx.nPartitions, ctx.pos_handles, -1);
-            ret = starpu_task_wait_for_all();
-            if (ret != 0) {
-                fprintf(stderr,
-                        "ERROR: starpu_task_wait_for_all after unpartition failed (%d)\n",
-                        ret);
-                break;
-            }
-
-            starpu_data_partition_clean(
-                ctx.pos_handle, ctx.nPartitions, ctx.pos_handles);
-            starpu_data_partition_clean(
-                ctx.vel_handle, ctx.nPartitions, ctx.vel_handles);
-            ctx.partitions_cleaned = 1;
-        }
+        /* Synchronous gather: blocks until every task and transfer on the data
+         * has drained on all nodes, then removes the children. No asynchronous
+         * partition_clean, so no prefetch-accounting race. */
+        starpu_data_unpartition(ctx.pos_handle, STARPU_MAIN_RAM);
+        starpu_data_unpartition(ctx.vel_handle, STARPU_MAIN_RAM);
+        ctx.partitions_cleaned = 1;
 
         starpu_data_acquire(ctx.pos_handle, STARPU_R);
         starpu_data_acquire(ctx.vel_handle, STARPU_R);
@@ -463,9 +406,7 @@ int nbody_run_master_slave_classic(const options_t *opts,
     if (bf_descr != NULL) {
         free(bf_descr);
     }
-    if (partitioned) {
-        nbody_release_partitioned_bodyforce(bodyforce_cl);
-    }
+    nbody_release_partitioned_bodyforce(bodyforce_cl);
 
     ms_context_cleanup(&ctx);
     return ret;

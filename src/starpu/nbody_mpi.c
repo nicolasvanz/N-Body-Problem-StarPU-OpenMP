@@ -94,25 +94,22 @@ int nbody_run_mpi(const options_t *opts,
     }
     starpu_mpi_wait_for_all(MPI_COMM_WORLD);
 
-    int partitioned = (opts->force_deps == FORCE_DEPS_PARTITIONED);
     struct starpu_data_descr *bf_descr = NULL;
-    if (partitioned) {
-        if (nbody_finalize_partitioned_bodyforce(bodyforce_cl, nPartitions) != 0) {
-            fprintf(stderr, "ERROR: failed to allocate partitioned bodyforce modes\n");
-            ret = 1;
-            goto cleanup;
-        }
-        bf_descr = (struct starpu_data_descr *)malloc(
-            (nPartitions + 1) * sizeof(*bf_descr));
-        if (bf_descr == NULL) {
-            fprintf(stderr, "ERROR: allocation failed for bodyforce descriptors\n");
-            ret = 1;
-            goto cleanup;
-        }
-        for (int k = 0; k < nPartitions; k++) {
-            bf_descr[k].handle = pos_handles[k];
-            bf_descr[k].mode = STARPU_R;
-        }
+    if (nbody_finalize_partitioned_bodyforce(bodyforce_cl, nPartitions) != 0) {
+        fprintf(stderr, "ERROR: failed to allocate partitioned bodyforce modes\n");
+        ret = 1;
+        goto cleanup;
+    }
+    bf_descr = (struct starpu_data_descr *)malloc(
+        (nPartitions + 1) * sizeof(*bf_descr));
+    if (bf_descr == NULL) {
+        fprintf(stderr, "ERROR: allocation failed for bodyforce descriptors\n");
+        ret = 1;
+        goto cleanup;
+    }
+    for (int k = 0; k < nPartitions; k++) {
+        bf_descr[k].handle = pos_handles[k];
+        bf_descr[k].mode = STARPU_R;
     }
 
     const int nIters = 10;
@@ -120,31 +117,19 @@ int nbody_run_mpi(const options_t *opts,
 
     for (int i = 0; i < nIters; i++) {
         for (int j = 0; j < nPartitions; j++) {
-            if (partitioned) {
-                bf_descr[nPartitions].handle = vel_handles[j];
-                bf_descr[nPartitions].mode = STARPU_RW;
-                ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
-                                             bodyforce_cl,
-                                             STARPU_DATA_MODE_ARRAY,
-                                             bf_descr,
-                                             nPartitions + 1,
-                                             STARPU_VALUE,
-                                             &nPartitions,
-                                             sizeof(nPartitions),
-                                             STARPU_EXECUTE_ON_NODE,
-                                             j % size,
-                                             0);
-            } else {
-                ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
-                                             bodyforce_cl,
-                                             STARPU_R,
-                                             pos_handle,
-                                             STARPU_RW,
-                                             vel_handles[j],
-                                             STARPU_EXECUTE_ON_NODE,
-                                             j % size,
-                                             0);
-            }
+            bf_descr[nPartitions].handle = vel_handles[j];
+            bf_descr[nPartitions].mode = STARPU_RW;
+            ret = starpu_mpi_task_insert(MPI_COMM_WORLD,
+                                         bodyforce_cl,
+                                         STARPU_DATA_MODE_ARRAY,
+                                         bf_descr,
+                                         nPartitions + 1,
+                                         STARPU_VALUE,
+                                         &nPartitions,
+                                         sizeof(nPartitions),
+                                         STARPU_EXECUTE_ON_NODE,
+                                         j % size,
+                                         0);
         }
 
         for (int j = 0; j < nPartitions; j++) {
@@ -159,12 +144,8 @@ int nbody_run_mpi(const options_t *opts,
                                          0);
         }
 
-        if (partitioned) {
-            for (int k = 0; k < nPartitions; k++) {
-                starpu_mpi_cache_flush(MPI_COMM_WORLD, pos_handles[k]);
-            }
-        } else {
-            starpu_mpi_cache_flush(MPI_COMM_WORLD, pos_handle);
+        for (int k = 0; k < nPartitions; k++) {
+            starpu_mpi_cache_flush(MPI_COMM_WORLD, pos_handles[k]);
         }
     }
 
@@ -214,9 +195,7 @@ cleanup:
     if (bf_descr != NULL) {
         free(bf_descr);
     }
-    if (partitioned) {
-        nbody_release_partitioned_bodyforce(bodyforce_cl);
-    }
+    nbody_release_partitioned_bodyforce(bodyforce_cl);
     free(pos_handles);
     free(vel_handles);
 
